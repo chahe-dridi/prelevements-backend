@@ -28,16 +28,16 @@ pipeline {
         }
 
         stage('SonarQube Analysis') {
-    steps {
-        withSonarQubeEnv('My SonarQube Server') {
-            sh '''
-                dotnet sonarscanner begin /k:"Prelevements_par_caisse" /d:sonar.login=sqa_96dab87167e47d70162ec6aa72b013503430c11f /d:sonar.host.url="http://sonarqube:9000"
-                dotnet build --no-restore
-                dotnet sonarscanner end /d:sonar.login=sqa_96dab87167e47d70162ec6aa72b013503430c11f
-            '''
+        steps {
+            withSonarQubeEnv('My SonarQube Server') {
+                sh '''
+                    dotnet sonarscanner begin /k:"Prelevements_par_caisse" /d:sonar.login=sqa_3533b03234ad15d2a62e253ad99f7324ef817104 /d:sonar.host.url="http://sonarqube:9000"
+                    dotnet build --no-restore
+                    dotnet sonarscanner end /d:sonar.login=sqa_3533b03234ad15d2a62e253ad99f7324ef817104
+                '''
+            }
         }
     }
-}
 
 
 
