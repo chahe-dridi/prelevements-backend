@@ -1,13 +1,12 @@
 pipeline {
-    agent {
-        docker {
-            image 'mcr.microsoft.com/dotnet/sdk:8.0'
-        }
-    }
+    agent any
 
     environment {
-        DOTNET_CLI_TELEMETRY_OPTOUT = '1'
-        SONAR_TOKEN = credentials('SONAR_TOKEN')
+        SONAR_TOKEN = credentials('sonar-token') // Add this in Jenkins Credentials
+    }
+
+    tools {
+        dotnet 'dotnet8' // Must be configured in Jenkins (Manage Jenkins > Global Tool Configuration)
     }
 
     stages {
@@ -25,23 +24,33 @@ pipeline {
 
         stage('Build') {
             steps {
-                sh 'dotnet build --no-restore'
-            }
-        }
-
-        stage('SonarQube Analysis') {
-            steps {
-                withSonarQubeEnv('My SonarQube Server') {
-                    sh "dotnet sonarscanner begin /k:\"Prelevements_par_caisse\" /d:sonar.login=$SONAR_TOKEN"
-                    sh 'dotnet build --no-restore'
-                    sh "dotnet sonarscanner end /d:sonar.login=$SONAR_TOKEN"
-                }
+                sh 'dotnet build --configuration Release --no-restore'
             }
         }
 
         stage('Test') {
             steps {
                 sh 'dotnet test --no-build --verbosity normal'
+            }
+        }
+
+        stage('SonarQube Analysis') {
+            steps {
+                withSonarQubeEnv('My SonarQube Server') {
+                    sh """
+                        dotnet sonarscanner begin /k:"prelevements" /d:sonar.login=$SONAR_TOKEN
+                        dotnet build
+                        dotnet sonarscanner end /d:sonar.login=$SONAR_TOKEN
+                    """
+                }
+            }
+        }
+
+        stage('Quality Gate') {
+            steps {
+                timeout(time: 1, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
+                }
             }
         }
     }
