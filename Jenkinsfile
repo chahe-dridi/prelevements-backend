@@ -27,15 +27,18 @@ pipeline {
             }
         }
 
-        stage('SonarQube Analysis') {
-            steps {
-                withSonarQubeEnv('My SonarQube Server') {
-                    sh "dotnet sonarscanner begin /k:\"Prelevements_par_caisse\" /d:sonar.login=$SONAR_TOKEN"
-                    sh 'dotnet build --no-restore'
-                    sh "dotnet sonarscanner end /d:sonar.login=$SONAR_TOKEN"
-                }
+       stage('SonarQube Analysis') {
+        steps {
+            withSonarQubeEnv('My SonarQube Server') {
+                sh """
+                    dotnet sonarscanner begin /k:"Prelevements_par_caisse" /d:sonar.login=${SONAR_TOKEN} /d:sonar.host.url="http://sonarqube:9000"
+                    dotnet build --no-restore
+                    dotnet sonarscanner end /d:sonar.login=${SONAR_TOKEN}
+                """
             }
         }
+    }
+
 
         stage('Test') {
             steps {
