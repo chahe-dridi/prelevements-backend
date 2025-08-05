@@ -27,10 +27,12 @@ pipeline {
             }
         }
 
-     stage('SonarQube Analysis') {
+    stage('SonarQube Analysis') {
     steps {
         withCredentials([string(credentialsId: 'SONAR_TOKEN', variable: 'SONAR_TOKEN')]) {
             sh '''
+                echo "Using SonarQube token: ${SONAR_TOKEN:0:4}****"  # Only first 4 chars for safety
+                dotnet sonarscanner --version
                 dotnet sonarscanner begin /k:"Prelevements_par_caisse" /d:sonar.host.url="http://sonarqube:9000" /d:sonar.login=$SONAR_TOKEN
                 dotnet build
                 dotnet sonarscanner end /d:sonar.login=$SONAR_TOKEN
@@ -38,6 +40,7 @@ pipeline {
         }
     }
 }
+
 
 
 
