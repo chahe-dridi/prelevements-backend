@@ -27,17 +27,17 @@ pipeline {
             }
         }
 
-       stage('SonarQube Analysis') {
-        steps {
-            withSonarQubeEnv('My SonarQube Server') {
-                sh """
-                    dotnet sonarscanner begin /k:"Prelevements_par_caisse" /d:sonar.login=${SONAR_TOKEN} /d:sonar.host.url="http://sonarqube:9000"
-                    dotnet build --no-restore
-                    dotnet sonarscanner end /d:sonar.login=${SONAR_TOKEN}
-                """
+        stage('SonarQube Analysis') {
+            steps {
+                withSonarQubeEnv('My SonarQube Server') {
+                    sh '''
+                        dotnet sonarscanner begin /k:"Prelevements_par_caisse" /d:sonar.host.url="$SONAR_HOST_URL" /d:sonar.login="$SONAR_AUTH_TOKEN"
+                        dotnet build --no-restore
+                        dotnet sonarscanner end /d:sonar.login="$SONAR_AUTH_TOKEN"
+                    '''
+                }
             }
         }
-    }
 
 
         stage('Test') {
