@@ -5,7 +5,7 @@ pipeline {
         DOTNET_ROOT = '/root/.dotnet'
         PATH = "/root/.dotnet:/root/.dotnet/tools:${env.PATH}"
         DOTNET_CLI_TELEMETRY_OPTOUT = '1'
-        SONAR_TOKEN = credentials('SONAR_TOKEN') // Add your SonarQube token in Jenkins Credentials and use this ID
+        SONAR_TOKEN = credentials('SONAR_TOKEN') // Use Jenkins credentials securely
     }
 
     stages {
@@ -28,18 +28,20 @@ pipeline {
         }
 
         stage('SonarQube Analysis') {
-        steps {
-            withSonarQubeEnv('My SonarQube Server') {
-                sh '''
-                    dotnet sonarscanner begin /k:"Prelevements_par_caisse" /d:sonar.login=sqa_3533b03234ad15d2a62e253ad99f7324ef817104 /d:sonar.host.url="http://sonarqube:9000"
-                    dotnet build --no-restore
-                    dotnet sonarscanner end /d:sonar.login=sqa_3533b03234ad15d2a62e253ad99f7324ef817104
-                '''
+            steps {
+                withSonarQubeEnv('My SonarQube Server') {
+                    sh '''
+                        dotnet sonarscanner begin /k:"Prelevements_par_caisse" \
+                        /d:sonar.host.url="http://sonarqube:9000" \
+                        /d:sonar.login=${SONAR_TOKEN}
+                        
+                        dotnet build --no-restore
+
+                        dotnet sonarscanner end /d:sonar.login=${SONAR_TOKEN}
+                    '''
+                }
             }
         }
-    }
-
-
 
         stage('Test') {
             steps {
