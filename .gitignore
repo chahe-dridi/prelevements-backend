@@ -1,0 +1,7 @@
+.vs/
+.sonarqube/
+bin/
+obj/
+*.user
+*.suo
+*.vsidx
