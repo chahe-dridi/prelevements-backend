@@ -43,7 +43,7 @@ pipeline {
             }
         }
 
-        stage('Test') {
+        stage('Tesst') {
             steps {
                 sh 'dotnet test --no-build --verbosity normal'
             }
