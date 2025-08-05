@@ -1,31 +1,34 @@
-# Stage 1: Base runtime image
-FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS base
-WORKDIR /app
-EXPOSE 8080
-EXPOSE 8081
+FROM jenkins/jenkins:lts
 
-# Stage 2: Build stage
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
-ARG BUILD_CONFIGURATION=Release
-WORKDIR /src
+USER root
 
-# Copy only project files first to leverage caching
-COPY ["Prelevements_par_caisse/Prelevements_par_caisse.csproj", "Prelevements_par_caisse/"]
-RUN dotnet restore "Prelevements_par_caisse/Prelevements_par_caisse.csproj"
+# Install dependencies
+RUN apt-get update && apt-get install -y \
+    wget \
+    unzip \
+    curl \
+    apt-transport-https \
+    ca-certificates \
+    gnupg \
+    lsb-release \
+    libicu-dev \
+    && rm -rf /var/lib/apt/lists/*
 
-# Copy the rest of the files
-COPY . .
 
-WORKDIR "/src/Prelevements_par_caisse"
-RUN dotnet build "Prelevements_par_caisse.csproj" -c $BUILD_CONFIGURATION -o /app/build
+# Install .NET SDK 8
+RUN wget https://dot.net/v1/dotnet-install.sh -O dotnet-install.sh \
+    && chmod +x dotnet-install.sh \
+    && ./dotnet-install.sh --channel 8.0 \
+    && ln -s /root/.dotnet/dotnet /usr/bin/dotnet
 
-# Stage 3: Publish stage
-FROM build AS publish
-ARG BUILD_CONFIGURATION=Release
-RUN dotnet publish "Prelevements_par_caisse.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
+# Set environment variables
+ENV DOTNET_ROOT=/root/.dotnet
+ENV PATH=$PATH:/root/.dotnet:/root/.dotnet/tools
 
-# Stage 4: Final image
-FROM base AS final
-WORKDIR /app
-COPY --from=publish /app/publish .
-ENTRYPOINT ["dotnet", "Prelevements_par_caisse.dll"]
+# Install SonarScanner for .NET
+RUN /root/.dotnet/dotnet tool install --global dotnet-sonarscanner
+
+# Ensure tools are accessible to Jenkins user too
+RUN echo 'export PATH=$PATH:/root/.dotnet:/root/.dotnet/tools' >> /etc/profile
+
+USER jenkins
