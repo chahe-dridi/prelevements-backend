@@ -50,11 +50,11 @@ pipeline {
         withCredentials([string(credentialsId: 'SONAR_TOKEN', variable: 'SONAR_TOKEN')]) {
             sh '''
                 echo "Token: ${SONAR_TOKEN:0:4}****"
-                echo "SonarQube URL: http://sonarqube:9000"
+                echo "SonarQube URL: http://localhost:9000"
                 dotnet sonarscanner --version
                 dotnet sonarscanner begin \
                     /k:"Prelevements_par_caisse" \
-                    /d:sonar.host.url="http://sonarqube:9000" \
+                    /d:sonar.host.url="http://localhost:9000" \
                     /d:sonar.login=$SONAR_TOKEN
                 dotnet build
                 dotnet sonarscanner end /d:sonar.login=$SONAR_TOKEN
