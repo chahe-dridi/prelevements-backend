@@ -1,5 +1,4 @@
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.VisualBasic;
 
 namespace Prelevements_par_caisse.Controllers
 {
@@ -7,9 +6,6 @@ namespace Prelevements_par_caisse.Controllers
     [Route("[controller]")]
     public class WeatherForecastController : ControllerBase
     {
-        VariantType dateofbirth = new VariantType();
-        int xd = 0;
-
         private static readonly string[] Summaries = new[]
         {
             "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
