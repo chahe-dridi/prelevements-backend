@@ -31,7 +31,8 @@ pipeline {
     steps {
         withCredentials([string(credentialsId: 'SONAR_TOKEN', variable: 'SONAR_TOKEN')]) {
             sh '''
-                echo "Using SonarQube token: ${SONAR_TOKEN:0:4}****"
+                echo "Token: ${SONAR_TOKEN:0:4}****"
+                echo "SonarQube URL: http://sonarqube:9000"
                 dotnet sonarscanner --version
                 dotnet sonarscanner begin \
                     /k:"Prelevements_par_caisse" \
