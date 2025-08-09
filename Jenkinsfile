@@ -28,7 +28,7 @@ pipeline {
             }
         }
 
-  stage('SonarQube Analysis') {
+   stage('SonarQube Analysis') {
     steps {
         withCredentials([string(credentialsId: 'SONAR_TOKEN', variable: 'SONAR_TOKEN')]) {
             sh '''
@@ -36,13 +36,13 @@ pipeline {
                 dotnet sonarscanner --version
                 dotnet sonarscanner begin \
                     /k:"Prelevements_par_caisse" \
-                    /d:sonar.host.url="$SONAR_HOST_URL" \
+                    /d:sonar.host.url="http://sonarqube:9000" \
                     /d:sonar.login=$SONAR_TOKEN
                 dotnet build
                 dotnet sonarscanner end /d:sonar.login=$SONAR_TOKEN
             '''
         }
-    } 
+    }
 }
 
 
