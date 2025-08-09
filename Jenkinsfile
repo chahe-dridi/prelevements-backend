@@ -46,23 +46,23 @@ pipeline {
         }
 
         stage('SonarQube Analysis') {
-            steps {
-                sh '''
-                    echo "Using SonarQube token: ${SONAR_TOKEN:0:4}****"
-                    echo "SonarQube URL: $SONAR_HOST_URL"
-
-                    dotnet sonarscanner --version
-
-                    dotnet sonarscanner begin \
-                        /k:"Prelevements_par_caisse" \
-                        /d:sonar.host.url="$SONAR_HOST_URL" \
-                        /d:sonar.login=$SONAR_TOKEN
-
-                    dotnet build
-                    dotnet sonarscanner end /d:sonar.login=$SONAR_TOKEN
-                '''
-            }
+    steps {
+        withCredentials([string(credentialsId: 'SONAR_TOKEN', variable: 'SONAR_TOKEN')]) {
+            sh '''
+                echo "Token: ${SONAR_TOKEN:0:4}****"
+                echo "SonarQube URL: http://sonarqube:9000"
+                dotnet sonarscanner --version
+                dotnet sonarscanner begin \
+                    /k:"Prelevements_par_caisse" \
+                    /d:sonar.host.url="http://sonarqube:9000" \
+                    /d:sonar.login=$SONAR_TOKEN
+                dotnet build
+                dotnet sonarscanner end /d:sonar.login=$SONAR_TOKEN
+            '''
         }
+    }
+}
+
 
         stage('Test') {
             steps {
