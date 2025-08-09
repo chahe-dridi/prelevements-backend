@@ -42,7 +42,7 @@ pipeline {
                 dotnet sonarscanner end /d:sonar.login=$SONAR_TOKEN
             '''
         }
-    }
+    } 
 }
 
 
