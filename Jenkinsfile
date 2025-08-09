@@ -2,12 +2,12 @@ pipeline {
     agent any
 
       environment {
-        DOTNET_ROOT = '/root/.dotnet'
-        PATH = "/root/.dotnet:/root/.dotnet/tools:${env.PATH}"
-        DOTNET_CLI_TELEMETRY_OPTOUT = '1'
-        SONAR_HOST_URL = 'http://localhost:9000'  // Service name from docker-compose
-        SONAR_TOKEN = credentials('SONAR_TOKEN') // Jenkins credentials ID
-    }
+    DOTNET_ROOT = '/root/.dotnet'
+    PATH = "/root/.dotnet:/root/.dotnet/tools:${env.PATH}"
+    DOTNET_CLI_TELEMETRY_OPTOUT = '1'
+    SONAR_HOST_URL = 'http://sonarqube:9000'  // Correct for container network
+    SONAR_TOKEN = credentials('SONAR_TOKEN')
+}
 
     stages {
         stage('Checkout') {
@@ -28,7 +28,7 @@ pipeline {
             }
         }
 
-   stage('SonarQube Analysis') {
+  stage('SonarQube Analysis') {
     steps {
         withCredentials([string(credentialsId: 'SONAR_TOKEN', variable: 'SONAR_TOKEN')]) {
             sh '''
@@ -36,7 +36,7 @@ pipeline {
                 dotnet sonarscanner --version
                 dotnet sonarscanner begin \
                     /k:"Prelevements_par_caisse" \
-                    /d:sonar.host.url="http://sonarqube:9000" \
+                    /d:sonar.host.url="$SONAR_HOST_URL" \
                     /d:sonar.login=$SONAR_TOKEN
                 dotnet build
                 dotnet sonarscanner end /d:sonar.login=$SONAR_TOKEN
