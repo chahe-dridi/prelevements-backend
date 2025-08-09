@@ -28,11 +28,11 @@ pipeline {
             }
         }
 
-   stage('SonarQube Analysis') {
+ stage('SonarQube Analysis') {
     steps {
         withCredentials([string(credentialsId: 'SONAR_TOKEN', variable: 'SONAR_TOKEN')]) {
             sh '''
-                echo "Using SonarQube token: ${SONAR_TOKEN:0:4}****"
+                echo "Using SonarQube token: $(echo $SONAR_TOKEN | cut -c1-4)****"
                 dotnet sonarscanner --version
                 dotnet sonarscanner begin \
                     /k:"Prelevements_par_caisse" \
@@ -44,6 +44,7 @@ pipeline {
         }
     }
 }
+
 
 
 
