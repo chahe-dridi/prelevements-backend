@@ -2,12 +2,13 @@ pipeline {
     agent any
 
     environment {
-        DOTNET_ROOT = '/root/.dotnet'
-        PATH = "/root/.dotnet:/root/.dotnet/tools:${env.PATH}"
-        DOTNET_CLI_TELEMETRY_OPTOUT = '1'
-        SONAR_HOST_URL = 'http://sonarqube:9000'  // Service name from docker-compose
-        SONAR_TOKEN = credentials('SONAR_TOKEN') // Jenkins credentials ID
-    }
+    DOTNET_ROOT = '/root/.dotnet'
+    PATH = "/root/.dotnet:/root/.dotnet/tools:${env.PATH}"
+    DOTNET_CLI_TELEMETRY_OPTOUT = '1'
+    SONAR_HOST_URL = 'http://host.docker.internal:9000'  // Access host's SonarQube from container
+    SONAR_TOKEN = credentials('SONAR_TOKEN')
+}
+
 
     stages {
         stage('Checkout') {
