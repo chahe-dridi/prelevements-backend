@@ -1,11 +1,12 @@
 pipeline {
     agent any
 
-    environment {
+      environment {
         DOTNET_ROOT = '/root/.dotnet'
         PATH = "/root/.dotnet:/root/.dotnet/tools:${env.PATH}"
         DOTNET_CLI_TELEMETRY_OPTOUT = '1'
-        SONAR_TOKEN = credentials('SONAR_TOKEN') // Use Jenkins credentials securely
+        SONAR_HOST_URL = 'http://localhost:9000'  // Service name from docker-compose
+        SONAR_TOKEN = credentials('SONAR_TOKEN') // Jenkins credentials ID
     }
 
     stages {
