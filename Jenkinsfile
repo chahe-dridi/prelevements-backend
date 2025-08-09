@@ -55,10 +55,17 @@ stage('SonarQube Analysis') {
 
 
 
-        stage('Test') {
+            stage('Test') {
             steps {
-                sh 'dotnet test --no-build --verbosity normal'
+                sh 'dotnet restore'
+                sh 'dotnet build'
+                sh 'dotnet test --verbosity normal'
             }
         }
+
+
+
+
+
     }
 }
