@@ -55,13 +55,19 @@ stage('SonarQube Analysis') {
 
 
 
-            stage('Test') {
+        stage('Test') {
             steps {
-                sh 'dotnet restore'
-                sh 'dotnet build'
-                sh 'dotnet test --verbosity normal'
+                // Restore only the test projects explicitly (optional but recommended)
+                sh 'dotnet restore ./Prelevements_par_caisse.Tests/Prelevements_par_caisse.Tests.csproj'
+                
+                // Build the test project (and dependencies)
+                sh 'dotnet build ./Prelevements_par_caisse.Tests/Prelevements_par_caisse.Tests.csproj'
+                
+                // Run tests with detailed verbosity, fail pipeline if tests fail
+                sh 'dotnet test ./Prelevements_par_caisse.Tests/Prelevements_par_caisse.Tests.csproj --verbosity normal --no-build --results-directory ./TestResults --logger trx'
             }
         }
+
 
 
 
