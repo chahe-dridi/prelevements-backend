@@ -12,7 +12,7 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                git branch: 'main', url: 'https://github.com/chahe-dridi/prelevements-backend.git'
+                git branch: 'master', url: 'https://github.com/chahe-dridi/prelevements-backend.git'
             }
         }
 
@@ -28,19 +28,21 @@ pipeline {
             }
         }
 
-  stage('SonarQube Analysis') {
+stage('SonarQube Analysis') {
     steps {
         withCredentials([string(credentialsId: 'SONAR_TOKEN', variable: 'SONAR_TOKEN')]) {
-            sh '''
-                echo "Using SonarQube token: ${SONAR_TOKEN:0:4}****"
+            sh """
+                bash -c '
+                echo "Using SonarQube token: \${SONAR_TOKEN:0:4}****"
                 dotnet sonarscanner --version
-                dotnet sonarscanner begin \
-                    /k:"Prelevements_par_caisse" \
-                    /d:sonar.host.url="$SONAR_HOST_URL" \
-                    /d:sonar.login=$SONAR_TOKEN
+                dotnet sonarscanner begin \\
+                    /k:"Prelevements_par_caisse" \\
+                    /d:sonar.host.url="http://sonarqube:9000" \\
+                    /d:sonar.login=\$SONAR_TOKEN
                 dotnet build
-                dotnet sonarscanner end /d:sonar.login=$SONAR_TOKEN
-            '''
+                dotnet sonarscanner end /d:sonar.login=\$SONAR_TOKEN
+                '
+            """
         }
     }
 }
@@ -51,10 +53,25 @@ pipeline {
 
 
 
+
+
         stage('Test') {
             steps {
-                sh 'dotnet test --no-build --verbosity normal'
+                // Restore only the test projects explicitly (optional but recommended)
+                sh 'dotnet restore ./Prelevements_par_caisse.Tests/Prelevements_par_caisse.Tests.csproj'
+                
+                // Build the test project (and dependencies)
+                sh 'dotnet build ./Prelevements_par_caisse.Tests/Prelevements_par_caisse.Tests.csproj'
+                
+                // Run tests with detailed verbosity, fail pipeline if tests fail
+                sh 'dotnet test ./Prelevements_par_caisse.Tests/Prelevements_par_caisse.Tests.csproj --verbosity normal --no-build --results-directory ./TestResults --logger trx'
             }
         }
+
+
+
+
+
+
     }
 }
