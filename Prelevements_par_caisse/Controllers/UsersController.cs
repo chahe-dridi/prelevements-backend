@@ -96,7 +96,7 @@ namespace Prelevements_par_caisse.Controllers
         // PUT: api/Users/role
         // Change a user's role - Admin and SuperAdmin only
         [HttpPut("role")]
-        [Authorize(Roles = "Admin,SuperAdmin")]
+        [Authorize(Roles = "SuperAdmin")]
         public async Task<IActionResult> ChangeUserRole([FromBody] ChangeRoleDto dto)
         {
             var user = await _context.Users.FindAsync(dto.UserId);
