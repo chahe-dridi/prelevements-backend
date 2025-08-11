@@ -109,5 +109,50 @@ namespace Prelevements_par_caisse.Controllers
 
             return NoContent();
         }
+
+
+        // PUT: api/Users/{id}
+        [HttpPut("{id}")]
+        [Authorize(Roles = "SuperAdmin")]
+        public async Task<IActionResult> UpdateUser(Guid id, [FromBody] UpdateUserDto dto)
+        {
+            var user = await _context.Users.FindAsync(id);
+            if (user == null)
+                return NotFound();
+
+            if (!string.IsNullOrWhiteSpace(dto.Nom)) user.Nom = dto.Nom;
+            if (!string.IsNullOrWhiteSpace(dto.Prenom)) user.Prenom = dto.Prenom;
+            if (!string.IsNullOrWhiteSpace(dto.Email)) user.Email = dto.Email;
+
+            if (dto.Role != null) user.Role = dto.Role.Value;
+
+            await _context.SaveChangesAsync();
+
+            return NoContent();
+        }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     }
 }

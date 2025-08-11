@@ -24,4 +24,26 @@ namespace Prelevements_par_caisse.DTOs
         public Guid UserId { get; set; }
         public UserRole Role { get; set; }
     }
+
+
+
+    public class UpdateUserDto
+    {
+        public string Nom { get; set; }
+        public string Prenom { get; set; }
+        public string Email { get; set; }
+        public UserRole? Role { get; set; } // nullable so role is optional
+    }
+
+
+
+
+
+
+
+
+
+
+
+
 }
