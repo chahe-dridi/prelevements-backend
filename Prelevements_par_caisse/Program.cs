@@ -6,7 +6,14 @@ using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add DbContext with SQL Server connection string (from appsettings.json)
+// Detect if running inside Docker
+var isDocker = Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER") == "true";
+if (isDocker)
+{
+    builder.Configuration.AddJsonFile("appsettings.Docker.json", optional: false, reloadOnChange: true);
+}
+
+// Add DbContext with SQL Server connection string
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
@@ -27,6 +34,23 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 
+// CORS: Allow both HTTP & HTTPS for React dev
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowFrontend",
+        policy =>
+        {
+            policy.WithOrigins(
+                "http://localhost:3000",
+                "https://localhost:3000"
+            )
+            .AllowAnyHeader()
+            .AllowAnyMethod()
+            .AllowCredentials();
+        });
+});
+
+
 // Add controllers and swagger
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
@@ -34,6 +58,7 @@ builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
+// Swagger only in Development
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -41,6 +66,10 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+// Apply CORS before authentication
+app.UseCors("AllowFrontend");
+
 
 app.UseAuthentication();
 app.UseAuthorization();
