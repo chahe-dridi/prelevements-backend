@@ -1,5 +1,6 @@
 ﻿using System;
 using System.ComponentModel.DataAnnotations;
+using System.Text.Json.Serialization;
 
 namespace Prelevements_par_caisse.Models
 {
@@ -16,6 +17,7 @@ namespace Prelevements_par_caisse.Models
 
         [Required]
         public Guid CategorieId { get; set; }
+        [JsonIgnore]
         public Categorie Categorie { get; set; }
 
 

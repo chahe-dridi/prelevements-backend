@@ -20,26 +20,33 @@ namespace Prelevements_par_caisse.Data
         {
             base.OnModelCreating(modelBuilder);
 
-            // DemandeItem relationships
+            modelBuilder.Entity<Item>()
+                .Property(i => i.PrixUnitaire)
+                .HasColumnType("decimal(18,2)");
+
+            modelBuilder.Entity<Paiement>()
+                .Property(p => p.MontantTotal)
+                .HasColumnType("decimal(18,2)");
+
             modelBuilder.Entity<DemandeItem>()
-                 .HasOne(di => di.Demande)
-                 .WithMany(d => d.DemandeItems)
-                 .HasForeignKey(di => di.DemandeId)
-                 .OnDelete(DeleteBehavior.Cascade);
+                .HasOne(di => di.Demande)
+                .WithMany(d => d.DemandeItems)
+                .HasForeignKey(di => di.DemandeId)
+                .OnDelete(DeleteBehavior.Cascade);
 
             modelBuilder.Entity<DemandeItem>()
                 .HasOne(di => di.Item)
                 .WithMany()
                 .HasForeignKey(di => di.ItemId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Restrict);
 
             modelBuilder.Entity<Paiement>()
                 .HasOne(p => p.Demande)
                 .WithOne(d => d.Paiement)
                 .HasForeignKey<Paiement>(p => p.DemandeId)
                 .OnDelete(DeleteBehavior.Cascade);
-
         }
+
 
 
 

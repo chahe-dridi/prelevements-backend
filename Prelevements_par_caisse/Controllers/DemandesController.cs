@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Prelevements_par_caisse.Data;
 using Prelevements_par_caisse.DTOs;
 using Prelevements_par_caisse.Models;
+using System.Security.Claims;
 
 namespace Prelevements_par_caisse.Controllers
 {
@@ -32,15 +33,16 @@ namespace Prelevements_par_caisse.Controllers
         [HttpPost]
         public async Task<IActionResult> CreateDemande([FromBody] DemandeDto demandeDto)
         {
-            // Validate user exists and matches the logged in user or has admin role
-            var currentUserId = User.Claims.FirstOrDefault(c => c.Type == "sub")?.Value;
-            if (currentUserId == null || currentUserId != demandeDto.UtilisateurId.ToString())
-            {
-                // Optionally check if user has Admin role - but usually better to only allow self
-                return Unauthorized("Vous ne pouvez créer une demande que pour vous-même.");
-            }
+            // Get current user id from JWT "sub" claim
+            var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
+            if (currentUserId == null)
+                return Unauthorized("Utilisateur non authentifié.");
 
-            var user = await _context.Users.FindAsync(demandeDto.UtilisateurId);
+            // Validate user exists
+            if (!Guid.TryParse(currentUserId, out var userGuid))
+                return Unauthorized("User ID invalide.");
+
+            var user = await _context.Users.FindAsync(userGuid);
             if (user == null)
                 return BadRequest("Utilisateur introuvable.");
 
@@ -50,29 +52,28 @@ namespace Prelevements_par_caisse.Controllers
             if (category == null)
                 return BadRequest("Catégorie introuvable.");
 
-            // Validate selected items belong to this category
-            foreach (var itemDto in demandeDto.Items)
+            foreach (var demandeItemDto in demandeDto.Items)
             {
-                if (!category.Items.Any(i => i.Id == itemDto.ItemId))
-                    return BadRequest($"L'item {itemDto.ItemId} n'appartient pas à cette catégorie.");
+                if (!category.Items.Any(i => i.Id == demandeItemDto.ItemId))
+                    return BadRequest($"L'item {demandeItemDto.ItemId} n'appartient pas à cette catégorie.");
             }
 
             var demande = new Demande
             {
-                UtilisateurId = demandeDto.UtilisateurId,
+                UtilisateurId = userGuid, // Use user id from JWT only
                 CategorieId = demandeDto.CategorieId,
                 Statut = StatutDemande.EnAttente
             };
 
             _context.Demandes.Add(demande);
 
-            foreach (var itemDto in demandeDto.Items)
+            foreach (var demandeItemDto in demandeDto.Items)
             {
                 _context.DemandeItems.Add(new DemandeItem
                 {
                     Demande = demande,
-                    ItemId = itemDto.ItemId,
-                    Quantite = itemDto.Quantite
+                    ItemId = demandeItemDto.ItemId,
+                    Quantite = demandeItemDto.Quantite
                 });
             }
 
@@ -84,9 +85,8 @@ namespace Prelevements_par_caisse.Controllers
         [HttpGet("utilisateur/{userId}")]
         public async Task<ActionResult<IEnumerable<Demande>>> GetDemandesByUser(Guid userId)
         {
-            // Same user can only access their demandes or admin can access anyone
-            var currentUserId = User.Claims.FirstOrDefault(c => c.Type == "sub")?.Value;
-            var currentUserRole = User.Claims.FirstOrDefault(c => c.Type == "role")?.Value;
+            var currentUserId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
+            var currentUserRole = User.FindFirstValue(ClaimTypes.Role) ?? User.FindFirstValue("role");
 
             if (currentUserId != userId.ToString() && currentUserRole != "Admin" && currentUserRole != "SuperAdmin")
             {
