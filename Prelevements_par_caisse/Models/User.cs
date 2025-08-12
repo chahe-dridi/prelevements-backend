@@ -29,5 +29,13 @@ namespace Prelevements_par_caisse.Models
 
         [Required]
         public UserRole Role { get; set; } = UserRole.Utilisateur;
+
+
+
+
+        public ICollection<Demande> Demandes { get; set; } = new List<Demande>();
+
+
+
     }
 }
