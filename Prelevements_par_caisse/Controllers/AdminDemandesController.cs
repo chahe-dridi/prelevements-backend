@@ -21,20 +21,51 @@ namespace Prelevements_par_caisse.Controllers
 
         // GET: api/admindemandes
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<Demande>>> GetAllDemandes()
+        public async Task<IActionResult> GetAllDemandes()
         {
-            return await _context.Demandes
+            var demandes = await _context.Demandes
                 .Include(d => d.Utilisateur)
                 .Include(d => d.Categorie)
                 .Include(d => d.DemandeItems)
                     .ThenInclude(di => di.Item)
                 .Include(d => d.Paiement)
+                .Select(d => new
+                {
+                    id = d.Id,
+                    statut = d.Statut.ToString(),
+                    utilisateur = new
+                    {
+                        nom = d.Utilisateur.Nom,
+                        prenom = d.Utilisateur.Prenom
+                    },
+                    categorie = new
+                    {
+                        nom = d.Categorie.Nom
+                    },
+                    demandeItems = d.DemandeItems.Select(di => new {
+                        id = di.Id,
+                        quantite = di.Quantite,
+                        item = new
+                        {
+                            nom = di.Item.Nom,
+                            prixUnitaire = di.Item.PrixUnitaire
+                        }
+                    }),
+                    paiement = d.Paiement != null ? new
+                    {
+                        montantTotal = d.Paiement.MontantTotal,
+                        effectuePar = d.Paiement.EffectuePar,
+                        datePaiement = d.Paiement.DatePaiement
+                    } : null
+                })
                 .ToListAsync();
+
+            return Ok(demandes);
         }
 
         // GET: api/admindemandes/{id}
         [HttpGet("{id}")]
-        public async Task<ActionResult<Demande>> GetDemande(Guid id)
+        public async Task<IActionResult> GetDemande(Guid id)
         {
             var demande = await _context.Demandes
                 .Include(d => d.Utilisateur)
@@ -42,26 +73,135 @@ namespace Prelevements_par_caisse.Controllers
                 .Include(d => d.DemandeItems)
                     .ThenInclude(di => di.Item)
                 .Include(d => d.Paiement)
+                .Select(d => new
+                {
+                    id = d.Id,
+                    statut = d.Statut.ToString(),
+                    utilisateur = new
+                    {
+                        nom = d.Utilisateur.Nom,
+                        prenom = d.Utilisateur.Prenom
+                    },
+                    categorie = new
+                    {
+                        nom = d.Categorie.Nom
+                    },
+                    demandeItems = d.DemandeItems.Select(di => new {
+                        id = di.Id,
+                        quantite = di.Quantite,
+                        item = new
+                        {
+                            nom = di.Item.Nom,
+                            prixUnitaire = di.Item.PrixUnitaire
+                        }
+                    }),
+                    paiement = d.Paiement != null ? new
+                    {
+                        montantTotal = d.Paiement.MontantTotal,
+                        effectuePar = d.Paiement.EffectuePar,
+                        datePaiement = d.Paiement.DatePaiement
+                    } : null
+                })
+                .FirstOrDefaultAsync(d => d.id == id);
+
+            if (demande == null)
+                return NotFound(new { message = "Demande introuvable" });
+
+            return Ok(demande);
+        }
+
+
+
+
+
+        [HttpPut("valider/{id}")]
+        public async Task<IActionResult> ValiderDemande(Guid id, [FromBody] PaiementValidationDto dto)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            var demande = await _context.Demandes
+                .Include(d => d.DemandeItems)
+                    .ThenInclude(di => di.Item)
+                .Include(d => d.Paiement)
                 .FirstOrDefaultAsync(d => d.Id == id);
 
             if (demande == null)
-                return NotFound();
+                return NotFound(new { message = "Demande introuvable" });
 
-            return demande;
-        }
-
-        // PUT: api/admindemandes/valider/{id}
-        [HttpPut("valider/{id}")]
-        public async Task<IActionResult> ValiderDemande(Guid id)
-        {
-            var demande = await _context.Demandes.FindAsync(id);
-            if (demande == null)
-                return NotFound();
-
+            // Changer le statut
             demande.Statut = StatutDemande.Validee;
+
+            // Calcul du montant total
+            var montantTotal = demande.DemandeItems.Sum(di => di.Quantite * di.Item.PrixUnitaire);
+
+            // Création du paiement
+            var paiement = new Paiement
+            {
+                DemandeId = demande.Id,
+                MontantTotal = montantTotal,                 // auto
+                DatePaiement = DateTime.Now,                 // auto
+                EffectuePar = User.Identity?.Name ?? "Admin", // auto
+                ComptePaiement = dto.ComptePaiement,         // manuel
+                MontantEnLettres = dto.MontantEnLettres      // manuel
+            };
+
+            _context.Paiements.Add(paiement);
+
             await _context.SaveChangesAsync();
-            return Ok("Demande validée.");
+            return Ok(new { message = "Demande validée et paiement généré" });
         }
+
+
+
+        // PUT: api/admindemandes/update/{id}
+        [HttpPut("update/{id}")]
+        public async Task<IActionResult> UpdateDemande(Guid id, [FromBody] PaiementValidationDto dto)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            var demande = await _context.Demandes
+                .Include(d => d.DemandeItems)
+                .Include(d => d.Paiement)
+                .FirstOrDefaultAsync(d => d.Id == id);
+
+            if (demande == null)
+                return NotFound(new { message = "Demande introuvable" });
+
+            // Si le paiement existe déjà → on le met à jour
+            if (demande.Paiement != null)
+            {
+                demande.Paiement.ComptePaiement = dto.ComptePaiement;
+                demande.Paiement.MontantEnLettres = dto.MontantEnLettres;
+                demande.Paiement.DatePaiement = DateTime.Now;
+                demande.Paiement.EffectuePar = User.Identity?.Name ?? "Admin";
+            }
+            else
+            {
+                var montantTotal = demande.DemandeItems.Sum(di => di.Quantite * di.Item.PrixUnitaire);
+                var paiement = new Paiement
+                {
+                    DemandeId = demande.Id,
+                    MontantTotal = montantTotal,
+                    DatePaiement = DateTime.Now,
+                    EffectuePar = User.Identity?.Name ?? "Admin",
+                    ComptePaiement = dto.ComptePaiement,
+                    MontantEnLettres = dto.MontantEnLettres
+                };
+                _context.Paiements.Add(paiement);
+            }
+
+            await _context.SaveChangesAsync();
+            return Ok(new { message = "Demande mise à jour avec succès" });
+        }
+
+
+
+
+
+
+
 
         // PUT: api/admindemandes/refuser/{id}
         [HttpPut("refuser/{id}")]
@@ -69,38 +209,11 @@ namespace Prelevements_par_caisse.Controllers
         {
             var demande = await _context.Demandes.FindAsync(id);
             if (demande == null)
-                return NotFound();
+                return NotFound(new { message = "Demande introuvable" });
 
             demande.Statut = StatutDemande.Refusee;
             await _context.SaveChangesAsync();
-            return Ok("Demande refusée.");
-        }
-
-        // POST: api/admindemandes/paiement
-        [HttpPost("paiement")]
-        public async Task<IActionResult> EnregistrerPaiement([FromBody] PaiementDto paiementDto)
-        {
-            var demande = await _context.Demandes.FindAsync(paiementDto.DemandeId);
-            if (demande == null || demande.Statut != StatutDemande.Validee)
-                return BadRequest("Demande introuvable ou non validée.");
-
-            // Prevent double paiement
-            var existingPaiement = await _context.Paiements.FirstOrDefaultAsync(p => p.DemandeId == paiementDto.DemandeId);
-            if (existingPaiement != null)
-                return BadRequest("Cette demande a déjà un paiement enregistré.");
-
-            var paiement = new Paiement
-            {
-                DemandeId = paiementDto.DemandeId,
-                EffectuePar = paiementDto.EffectuePar,
-                ComptePaiement = paiementDto.ComptePaiement,
-                MontantTotal = paiementDto.MontantTotal,
-                MontantEnLettres = paiementDto.MontantEnLettres
-            };
-
-            _context.Paiements.Add(paiement);
-            await _context.SaveChangesAsync();
-            return Ok("Paiement enregistré avec succès.");
+            return Ok(new { message = "Demande refusée" });
         }
     }
 }
