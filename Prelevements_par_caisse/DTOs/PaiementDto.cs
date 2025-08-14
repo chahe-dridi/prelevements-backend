@@ -9,6 +9,9 @@ namespace Prelevements_par_caisse.DTOs
         public string ComptePaiement { get; set; }
         public decimal MontantTotal { get; set; }
         public string MontantEnLettres { get; set; }
+
+     
+
     }
 
 
