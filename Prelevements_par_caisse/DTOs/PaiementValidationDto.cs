@@ -10,6 +10,11 @@ namespace Prelevements_par_caisse.DTOs
 
         [Required]
         public string MontantEnLettres { get; set; }
+
+        [Required]
+        public string EffectuePar { get; set; }
+
+
     }
 
 

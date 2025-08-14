@@ -19,7 +19,102 @@ namespace Prelevements_par_caisse.Controllers
             _context = context;
         }
 
-        // GET: api/admindemandes
+        /*   // GET: api/admindemandes
+           [HttpGet]
+           public async Task<IActionResult> GetAllDemandes()
+           {
+               var demandes = await _context.Demandes
+                   .Include(d => d.Utilisateur)
+                   .Include(d => d.Categorie)
+
+                   .Include(d => d.DemandeItems)
+                       .ThenInclude(di => di.Item)
+                   .Include(d => d.Paiement)
+                   .Select(d => new
+                   {
+                       id = d.Id,
+                       statut = d.Statut.ToString(),
+                       DateDemande = d.DateDemande,
+
+
+                       utilisateur = new
+                       {
+                           nom = d.Utilisateur.Nom,
+                           prenom = d.Utilisateur.Prenom
+                       },
+                       categorie = new
+                       {
+                           nom = d.Categorie.Nom
+                       },
+                       demandeItems = d.DemandeItems.Select(di => new {
+                           id = di.Id,
+                           quantite = di.Quantite,
+                           item = new
+                           {
+                               nom = di.Item.Nom,
+                               prixUnitaire = di.Item.PrixUnitaire
+                           }
+                       }),
+                       paiement = d.Paiement != null ? new
+                       {
+                           montantTotal = d.Paiement.MontantTotal,
+                           effectuePar = d.Paiement.EffectuePar,
+                           datePaiement = d.Paiement.DatePaiement
+                       } : null
+                   })
+                   .ToListAsync();
+
+               return Ok(demandes);
+           }
+
+           // GET: api/admindemandes/{id}
+           [HttpGet("{id}")]
+           public async Task<IActionResult> GetDemande(Guid id)
+           {
+               var demande = await _context.Demandes
+                   .Include(d => d.Utilisateur)
+                   .Include(d => d.Categorie)
+                   .Include(d => d.DemandeItems)
+                       .ThenInclude(di => di.Item)
+                   .Include(d => d.Paiement)
+                   .Select(d => new
+                   {
+                       id = d.Id,
+                       statut = d.Statut.ToString(),
+                       utilisateur = new
+                       {
+                           nom = d.Utilisateur.Nom,
+                           prenom = d.Utilisateur.Prenom
+                       },
+                       categorie = new
+                       {
+                           nom = d.Categorie.Nom
+                       },
+                       demandeItems = d.DemandeItems.Select(di => new {
+                           id = di.Id,
+                           quantite = di.Quantite,
+                           item = new
+                           {
+                               nom = di.Item.Nom,
+                               prixUnitaire = di.Item.PrixUnitaire
+                           }
+                       }),
+                       paiement = d.Paiement != null ? new
+                       {
+                           montantTotal = d.Paiement.MontantTotal,
+                           effectuePar = d.Paiement.EffectuePar,
+                           datePaiement = d.Paiement.DatePaiement
+                       } : null
+                   })
+                   .FirstOrDefaultAsync(d => d.id == id);
+
+               if (demande == null)
+                   return NotFound(new { message = "Demande introuvable" });
+
+               return Ok(demande);
+           }
+           */
+
         [HttpGet]
         public async Task<IActionResult> GetAllDemandes()
         {
@@ -33,6 +128,7 @@ namespace Prelevements_par_caisse.Controllers
                 {
                     id = d.Id,
                     statut = d.Statut.ToString(),
+                    dateDemande = d.DateDemande, // Fixed the property name to match frontend
                     utilisateur = new
                     {
                         nom = d.Utilisateur.Nom,
@@ -42,6 +138,11 @@ namespace Prelevements_par_caisse.Controllers
                     {
                         nom = d.Categorie.Nom
                     },
+                    items = d.DemandeItems.Select(di => new { // Added this for frontend items display
+                        id = di.Id,
+                        nom = di.Item.Nom,
+                        quantite = di.Quantite
+                    }),
                     demandeItems = d.DemandeItems.Select(di => new {
                         id = di.Id,
                         quantite = di.Quantite,
@@ -54,6 +155,8 @@ namespace Prelevements_par_caisse.Controllers
                     paiement = d.Paiement != null ? new
                     {
                         montantTotal = d.Paiement.MontantTotal,
+                        comptePaiement = d.Paiement.ComptePaiement, // Added missing field
+                        montantEnLettres = d.Paiement.MontantEnLettres, // Added missing field
                         effectuePar = d.Paiement.EffectuePar,
                         datePaiement = d.Paiement.DatePaiement
                     } : null
@@ -77,10 +180,13 @@ namespace Prelevements_par_caisse.Controllers
                 {
                     id = d.Id,
                     statut = d.Statut.ToString(),
+                    dateDemande = d.DateDemande, // Fixed the property name to match frontend
                     utilisateur = new
                     {
                         nom = d.Utilisateur.Nom,
-                        prenom = d.Utilisateur.Prenom
+                        prenom = d.Utilisateur.Prenom,
+                        email = d.Utilisateur.Email, // Added email field
+                      
                     },
                     categorie = new
                     {
@@ -98,6 +204,8 @@ namespace Prelevements_par_caisse.Controllers
                     paiement = d.Paiement != null ? new
                     {
                         montantTotal = d.Paiement.MontantTotal,
+                        comptePaiement = d.Paiement.ComptePaiement, // Added missing field
+                        montantEnLettres = d.Paiement.MontantEnLettres, // Added missing field
                         effectuePar = d.Paiement.EffectuePar,
                         datePaiement = d.Paiement.DatePaiement
                     } : null
@@ -109,9 +217,6 @@ namespace Prelevements_par_caisse.Controllers
 
             return Ok(demande);
         }
-
-
-
 
 
         [HttpPut("valider/{id}")]
@@ -141,7 +246,9 @@ namespace Prelevements_par_caisse.Controllers
                 DemandeId = demande.Id,
                 MontantTotal = montantTotal,                 // auto
                 DatePaiement = DateTime.Now,                 // auto
-                EffectuePar = User.Identity?.Name ?? "Admin", // auto
+                //EffectuePar = User.Identity?.Name ?? "Admin", // auto
+                EffectuePar = dto.EffectuePar,
+
                 ComptePaiement = dto.ComptePaiement,         // manuel
                 MontantEnLettres = dto.MontantEnLettres      // manuel
             };
@@ -175,7 +282,8 @@ namespace Prelevements_par_caisse.Controllers
                 demande.Paiement.ComptePaiement = dto.ComptePaiement;
                 demande.Paiement.MontantEnLettres = dto.MontantEnLettres;
                 demande.Paiement.DatePaiement = DateTime.Now;
-                demande.Paiement.EffectuePar = User.Identity?.Name ?? "Admin";
+                demande.Paiement.EffectuePar = dto.EffectuePar;
+
             }
             else
             {
@@ -185,7 +293,7 @@ namespace Prelevements_par_caisse.Controllers
                     DemandeId = demande.Id,
                     MontantTotal = montantTotal,
                     DatePaiement = DateTime.Now,
-                    EffectuePar = User.Identity?.Name ?? "Admin",
+                    EffectuePar = dto.EffectuePar,
                     ComptePaiement = dto.ComptePaiement,
                     MontantEnLettres = dto.MontantEnLettres
                 };
