@@ -14,7 +14,7 @@ namespace Prelevements_par_caisse.DTOs
         [Required]
         public string EffectuePar { get; set; }
 
-
+        public string? Statut { get; set; }
     }
 
 
