@@ -417,6 +417,12 @@ namespace Prelevements_par_caisse.Controllers
                 if (string.IsNullOrWhiteSpace(categoryDto.Nom))
                     return BadRequest("Le nom de la catégorie est requis.");
 
+                // Check if category name already exists
+                var existingCategory = await _context.Categories
+                    .FirstOrDefaultAsync(c => c.Nom.ToLower() == categoryDto.Nom.ToLower().Trim());
+                if (existingCategory != null)
+                    return BadRequest("Une catégorie avec ce nom existe déjà.");
+
                 var category = new Categorie
                 {
                     Nom = categoryDto.Nom.Trim(),
@@ -427,6 +433,100 @@ namespace Prelevements_par_caisse.Controllers
                 await _context.SaveChangesAsync();
 
                 return Ok(new { Message = "Catégorie ajoutée avec succès", Id = category.Id });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"Erreur serveur: {ex.Message}");
+            }
+        }
+
+        // GET: api/demandes/categories/{id}
+        [HttpGet("categories/{id}")]
+        [Authorize(Roles = "Admin,SuperAdmin")]
+        public async Task<IActionResult> GetCategory(Guid id)
+        {
+            try
+            {
+                var category = await _context.Categories
+                    .Include(c => c.Items)
+                    .FirstOrDefaultAsync(c => c.Id == id);
+
+                if (category == null)
+                    return NotFound("Catégorie introuvable.");
+
+                return Ok(category);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"Erreur serveur: {ex.Message}");
+            }
+        }
+
+        // PUT: api/demandes/categories/{id}
+        [HttpPut("categories/{id}")]
+        [Authorize(Roles = "Admin,SuperAdmin")]
+        public async Task<IActionResult> UpdateCategory(Guid id, [FromBody] CategorieDto categoryDto)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(categoryDto.Nom))
+                    return BadRequest("Le nom de la catégorie est requis.");
+
+                var category = await _context.Categories.FindAsync(id);
+                if (category == null)
+                    return NotFound("Catégorie introuvable.");
+
+                // Check if another category with the same name exists (excluding current one)
+                var existingCategory = await _context.Categories
+                    .FirstOrDefaultAsync(c => c.Id != id && c.Nom.ToLower() == categoryDto.Nom.ToLower().Trim());
+                if (existingCategory != null)
+                    return BadRequest("Une autre catégorie avec ce nom existe déjà.");
+
+                category.Nom = categoryDto.Nom.Trim();
+                category.Description = categoryDto.Description?.Trim();
+
+                await _context.SaveChangesAsync();
+
+                return Ok(new { Message = "Catégorie mise à jour avec succès" });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"Erreur serveur: {ex.Message}");
+            }
+        }
+
+        // DELETE: api/demandes/categories/{id}
+        [HttpDelete("categories/{id}")]
+        [Authorize(Roles = "Admin,SuperAdmin")]
+        public async Task<IActionResult> DeleteCategory(Guid id)
+        {
+            try
+            {
+                var category = await _context.Categories
+                    .Include(c => c.Items)
+                    .FirstOrDefaultAsync(c => c.Id == id);
+
+                if (category == null)
+                    return NotFound("Catégorie introuvable.");
+
+                // Check if category has associated demandes using separate query
+                var hasAssociatedDemandes = await _context.Demandes
+                    .AnyAsync(d => d.CategorieId == id);
+
+                if (hasAssociatedDemandes)
+                    return BadRequest("Impossible de supprimer cette catégorie car elle contient des demandes associées.");
+
+                // Delete all items in this category first
+                if (category.Items != null && category.Items.Any())
+                {
+                    _context.Items.RemoveRange(category.Items);
+                }
+
+                // Delete the category
+                _context.Categories.Remove(category);
+                await _context.SaveChangesAsync();
+
+                return Ok(new { Message = "Catégorie supprimée avec succès" });
             }
             catch (Exception ex)
             {
@@ -451,6 +551,13 @@ namespace Prelevements_par_caisse.Controllers
                 if (category == null)
                     return BadRequest("Catégorie introuvable.");
 
+                // Check if item name already exists in this category
+                var existingItem = await _context.Items
+                    .FirstOrDefaultAsync(i => i.CategorieId == itemDto.CategorieId &&
+                                            i.Nom.ToLower() == itemDto.Nom.ToLower().Trim());
+                if (existingItem != null)
+                    return BadRequest("Un item avec ce nom existe déjà dans cette catégorie.");
+
                 var item = new Item
                 {
                     Nom = itemDto.Nom.Trim(),
@@ -462,6 +569,100 @@ namespace Prelevements_par_caisse.Controllers
                 await _context.SaveChangesAsync();
 
                 return Ok(new { Message = "Item ajouté avec succès", Id = item.Id });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"Erreur serveur: {ex.Message}");
+            }
+        }
+
+        // GET: api/demandes/items/{id}
+        [HttpGet("items/{id}")]
+        [Authorize(Roles = "Admin,SuperAdmin")]
+        public async Task<IActionResult> GetItem(Guid id)
+        {
+            try
+            {
+                var item = await _context.Items
+                    .Include(i => i.Categorie)
+                    .FirstOrDefaultAsync(i => i.Id == id);
+
+                if (item == null)
+                    return NotFound("Item introuvable.");
+
+                return Ok(item);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"Erreur serveur: {ex.Message}");
+            }
+        }
+
+        // PUT: api/demandes/items/{id}
+        [HttpPut("items/{id}")]
+        [Authorize(Roles = "Admin,SuperAdmin")]
+        public async Task<IActionResult> UpdateItem(Guid id, [FromBody] ItemDto itemDto)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(itemDto.Nom))
+                    return BadRequest("Le nom de l'item est requis.");
+
+                if (itemDto.PrixUnitaire <= 0)
+                    return BadRequest("Le prix unitaire doit être positif.");
+
+                var item = await _context.Items.FindAsync(id);
+                if (item == null)
+                    return NotFound("Item introuvable.");
+
+                var category = await _context.Categories.FindAsync(itemDto.CategorieId);
+                if (category == null)
+                    return BadRequest("Catégorie introuvable.");
+
+                // Check if another item with the same name exists in the target category (excluding current one)
+                var existingItem = await _context.Items
+                    .FirstOrDefaultAsync(i => i.Id != id &&
+                                            i.CategorieId == itemDto.CategorieId &&
+                                            i.Nom.ToLower() == itemDto.Nom.ToLower().Trim());
+                if (existingItem != null)
+                    return BadRequest("Un autre item avec ce nom existe déjà dans cette catégorie.");
+
+                item.Nom = itemDto.Nom.Trim();
+                item.PrixUnitaire = itemDto.PrixUnitaire;
+                item.CategorieId = itemDto.CategorieId;
+
+                await _context.SaveChangesAsync();
+
+                return Ok(new { Message = "Item mis à jour avec succès" });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"Erreur serveur: {ex.Message}");
+            }
+        }
+
+        // DELETE: api/demandes/items/{id}
+        [HttpDelete("items/{id}")]
+        [Authorize(Roles = "Admin,SuperAdmin")]
+        public async Task<IActionResult> DeleteItem(Guid id)
+        {
+            try
+            {
+                var item = await _context.Items.FindAsync(id);
+                if (item == null)
+                    return NotFound("Item introuvable.");
+
+                // Check if item has associated demande items using separate query
+                var hasDemandeItems = await _context.DemandeItems
+                    .AnyAsync(di => di.ItemId == id);
+
+                if (hasDemandeItems)
+                    return BadRequest("Impossible de supprimer cet item car il est utilisé dans des demandes existantes.");
+
+                _context.Items.Remove(item);
+                await _context.SaveChangesAsync();
+
+                return Ok(new { Message = "Item supprimé avec succès" });
             }
             catch (Exception ex)
             {
