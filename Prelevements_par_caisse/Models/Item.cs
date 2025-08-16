@@ -20,7 +20,7 @@ namespace Prelevements_par_caisse.Models
         [JsonIgnore]
         public Categorie Categorie { get; set; }
 
-
+       
 
 
 
