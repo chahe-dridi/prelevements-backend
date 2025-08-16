@@ -146,7 +146,7 @@ namespace Prelevements_par_caisse.Controllers
 
 
 
-
+        /*
         // GET: api/demandes/my-demandes (uses email from JWT)
         [HttpGet("my-demandes")]
         public async Task<ActionResult<IEnumerable<object>>> GetMyDemandes()
@@ -208,7 +208,7 @@ namespace Prelevements_par_caisse.Controllers
                 // Log the exception details
                 return StatusCode(500, $"Erreur serveur: {ex.Message}");
             }
-        }
+        }*/
 
         // PUT: api/demandes/{id} - FIXED VERSION
         [HttpPut("{id}")]
@@ -318,5 +318,164 @@ namespace Prelevements_par_caisse.Controllers
 
             return Ok(new { Message = "Item ajouté avec succès", item.Id });
         }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        // Add this method to the DemandesController class
+
+        // DELETE: api/demandes/{id}/cancel - Cancel a demande
+        [HttpDelete("{id}/cancel")]
+        public async Task<IActionResult> CancelDemande(Guid id)
+        {
+            try
+            {
+                // Get current user email from JWT
+                var currentUserEmail = User.FindFirstValue(ClaimTypes.Email) ?? User.FindFirstValue("email");
+                if (currentUserEmail == null)
+                    return Unauthorized("Email utilisateur non trouvé dans le token.");
+
+                // Find user by email
+                var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == currentUserEmail);
+                if (user == null)
+                    return NotFound("Utilisateur introuvable.");
+
+                // Find the existing demande (only for the current user)
+                var demande = await _context.Demandes
+                    .Include(d => d.DemandeItems)
+                    .FirstOrDefaultAsync(d => d.Id == id && d.UtilisateurId == user.Id);
+
+                if (demande == null)
+                    return NotFound("Demande introuvable.");
+
+                // Check if demande can be cancelled (only EnAttente status)
+                if (demande.Statut != StatutDemande.EnAttente)
+                    return BadRequest("Seules les demandes en attente peuvent être annulées.");
+
+                // Remove demande and its items (cascade delete)
+                _context.DemandeItems.RemoveRange(demande.DemandeItems);
+                _context.Demandes.Remove(demande);
+
+                await _context.SaveChangesAsync();
+                return Ok(new { Message = "Demande annulée avec succès" });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"Erreur serveur: {ex.Message}");
+            }
+        }
+
+        // Also update the GetMyDemandes method to support pagination
+        [HttpGet("my-demandes")]
+        public async Task<ActionResult<object>> GetMyDemandes([FromQuery] int page = 1, [FromQuery] int pageSize = 10)
+        {
+            try
+            {
+                // Get current user email from JWT
+                var currentUserEmail = User.FindFirstValue(ClaimTypes.Email) ?? User.FindFirstValue("email");
+                if (currentUserEmail == null)
+                {
+                    return Unauthorized("Email utilisateur non trouvé dans le token.");
+                }
+
+                // Find user by email
+                var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == currentUserEmail);
+                if (user == null)
+                {
+                    return NotFound("Utilisateur introuvable.");
+                }
+
+                // Calculate pagination
+                var skip = (page - 1) * pageSize;
+
+                // Get total count
+                var totalCount = await _context.Demandes
+                    .Where(d => d.UtilisateurId == user.Id)
+                    .CountAsync();
+
+                // Get paginated demandes
+                var demandes = await _context.Demandes
+                    .Include(d => d.Categorie)
+                    .Include(d => d.DemandeItems)
+                        .ThenInclude(di => di.Item)
+                    .Where(d => d.UtilisateurId == user.Id)
+                    .OrderByDescending(d => d.DateDemande) // Most recent first
+                    .Skip(skip)
+                    .Take(pageSize)
+                    .Select(d => new
+                    {
+                        d.Id,
+                        d.DateDemande,
+                        d.Statut,
+                        d.CategorieId,
+                        Categorie = new
+                        {
+                            d.Categorie.Id,
+                            d.Categorie.Nom,
+                            d.Categorie.Description
+                        },
+                        DemandeItems = d.DemandeItems.Select(di => new
+                        {
+                            di.Id,
+                            di.Quantite,
+                            di.ItemId,
+                            Item = new
+                            {
+                                di.Item.Id,
+                                di.Item.Nom,
+                                di.Item.PrixUnitaire
+                            }
+                        }).ToList()
+                    })
+                    .ToListAsync();
+
+                var totalPages = (int)Math.Ceiling((double)totalCount / pageSize);
+
+                var result = new
+                {
+                    Data = demandes,
+                    Pagination = new
+                    {
+                        CurrentPage = page,
+                        PageSize = pageSize,
+                        TotalCount = totalCount,
+                        TotalPages = totalPages,
+                        HasPrevious = page > 1,
+                        HasNext = page < totalPages
+                    }
+                };
+
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"Erreur serveur: {ex.Message}");
+            }
+        }
+
+
+
+
+
+
+
+
+
+
+
+
+
     }
 }
