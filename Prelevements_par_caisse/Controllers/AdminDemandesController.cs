@@ -36,7 +36,8 @@ namespace Prelevements_par_caisse.Controllers
                     utilisateur = new
                     {
                         nom = d.Utilisateur.Nom,
-                        prenom = d.Utilisateur.Prenom
+                        prenom = d.Utilisateur.Prenom,
+                         email = d.Utilisateur.Email
                     },
                     categorie = new
                     {

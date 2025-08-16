@@ -203,5 +203,53 @@ namespace Prelevements_par_caisse.Controllers
                 return StatusCode(500, new { message = "Erreur lors de la suppression de l'utilisateur", error = ex.Message });
             }
         }
+
+
+
+        [HttpPut("password")]
+        [Authorize]
+        public async Task<IActionResult> UpdatePassword([FromBody] UpdatePasswordDto dto)
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (userId == null)
+                return Unauthorized();
+
+            var user = await _context.Users.FindAsync(Guid.Parse(userId));
+            if (user == null)
+                return NotFound();
+
+            if (dto.Password != dto.ConfirmPassword)
+                return BadRequest(new { message = "Les mots de passe ne correspondent pas" });
+
+            if (dto.Password.Length < 6)
+                return BadRequest(new { message = "Le mot de passe doit contenir au moins 6 caractères" });
+
+            user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password);
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = "Mot de passe mis à jour avec succès" });
+        }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     }
 }

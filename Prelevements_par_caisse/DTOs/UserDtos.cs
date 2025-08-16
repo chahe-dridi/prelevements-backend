@@ -44,7 +44,12 @@ namespace Prelevements_par_caisse.DTOs
 
 
 
-
+    // Add this to your DTOs
+    public class UpdatePasswordDto
+    {
+        public string Password { get; set; }
+        public string ConfirmPassword { get; set; }
+    }
 
 
 
