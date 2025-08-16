@@ -8,6 +8,7 @@ using System;
 using System.Linq;
 using System.Security.Claims;
 using System.Threading.Tasks;
+using BCrypt.Net;
 
 namespace Prelevements_par_caisse.Controllers
 {
@@ -24,27 +25,32 @@ namespace Prelevements_par_caisse.Controllers
         }
 
         // GET: api/Users
-        // Only Admin and SuperAdmin can get all users
         [HttpGet]
         [Authorize(Roles = "Admin,SuperAdmin")]
         public async Task<IActionResult> GetUsers()
         {
-            var users = await _context.Users
-                .Select(u => new UserDto
-                {
-                    Id = u.Id,
-                    Nom = u.Nom,
-                    Prenom = u.Prenom,
-                    Email = u.Email,
-                    Role = u.Role
-                })
-                .ToListAsync();
+            try
+            {
+                var users = await _context.Users
+                    .Select(u => new UserDto
+                    {
+                        Id = u.Id,
+                        Nom = u.Nom,
+                        Prenom = u.Prenom,
+                        Email = u.Email,
+                        Role = u.Role
+                    })
+                    .ToListAsync();
 
-            return Ok(users);
+                return Ok(users);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "Erreur lors du chargement des utilisateurs", error = ex.Message });
+            }
         }
 
         // GET: api/Users/profile
-        // Any logged in user can get their profile
         [HttpGet("profile")]
         [Authorize]
         public async Task<IActionResult> GetProfile()
@@ -70,7 +76,6 @@ namespace Prelevements_par_caisse.Controllers
         }
 
         // PUT: api/Users/profile
-        // Update current user's profile (except role)
         [HttpPut("profile")]
         [Authorize]
         public async Task<IActionResult> UpdateProfile([FromBody] UpdateProfileDto dto)
@@ -83,7 +88,6 @@ namespace Prelevements_par_caisse.Controllers
             if (user == null)
                 return NotFound();
 
-            // Update fields if provided
             if (!string.IsNullOrWhiteSpace(dto.Nom)) user.Nom = dto.Nom;
             if (!string.IsNullOrWhiteSpace(dto.Prenom)) user.Prenom = dto.Prenom;
             if (!string.IsNullOrWhiteSpace(dto.Email)) user.Email = dto.Email;
@@ -94,7 +98,6 @@ namespace Prelevements_par_caisse.Controllers
         }
 
         // PUT: api/Users/role
-        // Change a user's role - Admin and SuperAdmin only
         [HttpPut("role")]
         [Authorize(Roles = "SuperAdmin")]
         public async Task<IActionResult> ChangeUserRole([FromBody] ChangeRoleDto dto)
@@ -110,63 +113,95 @@ namespace Prelevements_par_caisse.Controllers
             return NoContent();
         }
 
-
         // PUT: api/Users/{id}
         [HttpPut("{id}")]
         [Authorize(Roles = "SuperAdmin")]
         public async Task<IActionResult> UpdateUser(Guid id, [FromBody] UpdateUserDto dto)
         {
-            var user = await _context.Users.FindAsync(id);
-            if (user == null)
-                return NotFound();
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
 
-            if (!string.IsNullOrWhiteSpace(dto.Nom)) user.Nom = dto.Nom;
-            if (!string.IsNullOrWhiteSpace(dto.Prenom)) user.Prenom = dto.Prenom;
-            if (!string.IsNullOrWhiteSpace(dto.Email)) user.Email = dto.Email;
+            try
+            {
+                var user = await _context.Users.FindAsync(id);
+                if (user == null)
+                    return NotFound(new { message = "Utilisateur introuvable" });
 
-            if (dto.Role != null) user.Role = dto.Role.Value;
+                // Validate email uniqueness if email is being changed
+                if (!string.IsNullOrWhiteSpace(dto.Email))
+                {
+                    var emailExists = await _context.Users
+                        .AnyAsync(u => u.Email.ToLower() == dto.Email.ToLower() && u.Id != id);
 
-            await _context.SaveChangesAsync();
+                    if (emailExists)
+                        return BadRequest(new { message = "Cet email est déjà utilisé par un autre utilisateur" });
+                }
 
-            return NoContent();
+                // Update basic information
+                if (!string.IsNullOrWhiteSpace(dto.Nom)) user.Nom = dto.Nom.Trim();
+                if (!string.IsNullOrWhiteSpace(dto.Prenom)) user.Prenom = dto.Prenom.Trim();
+                if (!string.IsNullOrWhiteSpace(dto.Email)) user.Email = dto.Email.Trim().ToLower();
+
+                // Update role if provided
+                if (dto.Role.HasValue)
+                {
+                    user.Role = dto.Role.Value;
+                }
+
+                // Update password if provided
+                if (!string.IsNullOrEmpty(dto.Password))
+                {
+                    if (dto.Password != dto.ConfirmPassword)
+                    {
+                        return BadRequest(new { message = "Les mots de passe ne correspondent pas" });
+                    }
+
+                    if (dto.Password.Length < 6)
+                    {
+                        return BadRequest(new { message = "Le mot de passe doit contenir au moins 6 caractères" });
+                    }
+
+                    // Hash the new password
+                    user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password);
+                }
+
+                await _context.SaveChangesAsync();
+
+                return Ok(new { message = "Utilisateur mis à jour avec succès" });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "Erreur lors de la mise à jour de l'utilisateur", error = ex.Message });
+            }
         }
-
-
 
         // DELETE: api/Users/{id}
         [HttpDelete("{id}")]
         [Authorize(Roles = "SuperAdmin")]
         public async Task<IActionResult> DeleteUser(Guid id)
         {
-            var user = await _context.Users.FindAsync(id);
-            if (user == null)
-                return NotFound();
+            try
+            {
+                var user = await _context.Users.FindAsync(id);
+                if (user == null)
+                    return NotFound(new { message = "Utilisateur introuvable" });
 
-            _context.Users.Remove(user);
-            await _context.SaveChangesAsync();
+                // Check if user has any demandes
+                var hasOrders = await _context.Demandes.AnyAsync(d => d.UtilisateurId == id);
+                if (hasOrders)
+                {
+                    return BadRequest(new { message = "Impossible de supprimer cet utilisateur car il a des demandes associées" });
+                }
 
-            return NoContent();
+                _context.Users.Remove(user);
+                await _context.SaveChangesAsync();
+
+                return Ok(new { message = "Utilisateur supprimé avec succès" });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "Erreur lors de la suppression de l'utilisateur", error = ex.Message });
+            }
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     }
 }
