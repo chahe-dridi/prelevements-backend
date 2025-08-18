@@ -33,6 +33,9 @@ namespace Prelevements_par_caisse.DTOs
         public string Prenom { get; set; }
         public string Email { get; set; }
         public UserRole? Role { get; set; } // nullable so role is optional
+
+        public string? Password { get; set; }
+        public string? ConfirmPassword { get; set; }
     }
 
 
@@ -41,7 +44,12 @@ namespace Prelevements_par_caisse.DTOs
 
 
 
-
+    // Add this to your DTOs
+    public class UpdatePasswordDto
+    {
+        public string Password { get; set; }
+        public string ConfirmPassword { get; set; }
+    }
 
 
 
