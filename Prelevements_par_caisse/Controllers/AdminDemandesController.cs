@@ -45,13 +45,15 @@ namespace Prelevements_par_caisse.Controllers
                         {
                             nom = d.Categorie.Nom
                         },
-                        items = d.DemandeItems.Select(di => new {
+                        items = d.DemandeItems.Select(di => new
+                        {
                             id = di.Id,
                             nom = di.Item.Nom,
                             quantite = di.Quantite,
                             prixUnitaire = di.PrixUnitaire
                         }),
-                        demandeItems = d.DemandeItems.Select(di => new {
+                        demandeItems = d.DemandeItems.Select(di => new
+                        {
                             id = di.Id,
                             quantite = di.Quantite,
                             prixUnitaire = di.PrixUnitaire,
@@ -107,7 +109,8 @@ namespace Prelevements_par_caisse.Controllers
                         {
                             nom = d.Categorie.Nom
                         },
-                        demandeItems = d.DemandeItems.Select(di => new {
+                        demandeItems = d.DemandeItems.Select(di => new
+                        {
                             id = di.Id,
                             quantite = di.Quantite,
                             prixUnitaire = di.PrixUnitaire,
@@ -168,9 +171,9 @@ namespace Prelevements_par_caisse.Controllers
                             demandeItem.PrixUnitaire = dtoItem.PrixUnitaire.Value;
                         }
                         if (!string.IsNullOrEmpty(dtoItem.Description))
-                            {
-                                demandeItem.Description = dtoItem.Description;
-                            }
+                        {
+                            demandeItem.Description = dtoItem.Description;
+                        }
                     }
                 }
 
@@ -230,7 +233,10 @@ namespace Prelevements_par_caisse.Controllers
                         {
                             demandeItem.PrixUnitaire = dtoItem.PrixUnitaire.Value;
                         }
-                        demandeItem.Description = dtoItem.Description;
+                        if (demandeItem != null)
+                        {
+                            demandeItem.Description = dtoItem.Description;
+                        }
                     }
                 }
 
@@ -389,28 +395,13 @@ namespace Prelevements_par_caisse.Controllers
             }
         }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         [HttpGet("analytics")]
         public async Task<IActionResult> GetAnalytics()
         {
             try
             {
                 var totalDemandes = await _context.Demandes.CountAsync();
-                var totalSpent = await _context.Paiements.SumAsync(p => p.MontantTotal);
+                var totalSpent = await _context.Paiements.SumAsync(p => (decimal?)p.MontantTotal) ?? 0;
                 var totalUsers = await _context.Users.CountAsync();
 
                 var demandesParStatut = await _context.Demandes
@@ -421,15 +412,17 @@ namespace Prelevements_par_caisse.Controllers
                 var topUsers = await _context.Demandes
                     .Include(d => d.Utilisateur)
                     .Include(d => d.Paiement)
+                    .Where(d => d.Utilisateur != null)
                     .GroupBy(d => d.UtilisateurId)
                     .Select(g => new
                     {
                         Id = g.Key,
-                        Nom = g.First().Utilisateur.Nom,
-                        Prenom = g.First().Utilisateur.Prenom,
-                        Email = g.First().Utilisateur.Email,
+                        Nom = g.First().Utilisateur.Nom ?? "",
+                        Prenom = g.First().Utilisateur.Prenom ?? "",
+                        Email = g.First().Utilisateur.Email ?? "",
                         TotalDemandes = g.Count(),
-                        TotalSpent = g.Sum(d => d.Paiement != null ? d.Paiement.MontantTotal : 0)
+                        TotalSpent = g.Sum(d => d.Paiement != null ? d.Paiement.MontantTotal : 0),
+                        IsFaveur = g.First().Utilisateur.Is_Faveur
                     })
                     .OrderByDescending(x => x.TotalSpent)
                     .Take(10)
@@ -438,11 +431,12 @@ namespace Prelevements_par_caisse.Controllers
                 var topCategories = await _context.Demandes
                     .Include(d => d.Categorie)
                     .Include(d => d.Paiement)
+                    .Where(d => d.Categorie != null)
                     .GroupBy(d => d.CategorieId)
                     .Select(g => new
                     {
                         Id = g.Key,
-                        Nom = g.First().Categorie.Nom,
+                        Nom = g.First().Categorie.Nom ?? "",
                         TotalDemandes = g.Count(),
                         TotalSpent = g.Sum(d => d.Paiement != null ? d.Paiement.MontantTotal : 0)
                     })
@@ -450,10 +444,140 @@ namespace Prelevements_par_caisse.Controllers
                     .Take(10)
                     .ToListAsync();
 
+                // Enhanced Monthly trends with more details
+                var monthlyTrends = await _context.Demandes
+                    .Include(d => d.Paiement)
+                    .Where(d => d.DateDemande >= DateTime.Now.AddMonths(-12))
+                    .GroupBy(d => new { Year = d.DateDemande.Year, Month = d.DateDemande.Month })
+                    .Select(g => new
+                    {
+                        Year = g.Key.Year,
+                        Month = g.Key.Month,
+                        TotalDemandes = g.Count(),
+                        TotalSpent = g.Sum(d => d.Paiement != null ? d.Paiement.MontantTotal : 0),
+                        ApprovedCount = g.Count(d => d.Statut == StatutDemande.Validee),
+                        PendingCount = g.Count(d => d.Statut == StatutDemande.EnAttente),
+                        RejectedCount = g.Count(d => d.Statut == StatutDemande.Refusee),
+                        AverageAmount = g.Where(d => d.Paiement != null).Any() 
+                            ? g.Where(d => d.Paiement != null).Average(d => d.Paiement.MontantTotal) 
+                            : 0
+                    })
+                    .OrderBy(x => x.Year)
+                    .ThenBy(x => x.Month)
+                    .ToListAsync();
+
+                // Daily activity for the last 30 days
+                var dailyActivity = await _context.Demandes
+                    .Include(d => d.Paiement)
+                    .Where(d => d.DateDemande >= DateTime.Now.AddDays(-30))
+                    .GroupBy(d => d.DateDemande.Date)
+                    .Select(g => new
+                    {
+                        Date = g.Key,
+                        Count = g.Count(),
+                        Amount = g.Sum(d => d.Paiement != null ? d.Paiement.MontantTotal : 0)
+                    })
+                    .OrderBy(x => x.Date)
+                    .ToListAsync();
+
+                // Status distribution over time
+                var statusTrends = await _context.Demandes
+                    .Where(d => d.DateDemande >= DateTime.Now.AddMonths(-6))
+                    .GroupBy(d => new { 
+                        Year = d.DateDemande.Year, 
+                        Month = d.DateDemande.Month,
+                        Status = d.Statut
+                    })
+                    .Select(g => new
+                    {
+                        Year = g.Key.Year,
+                        Month = g.Key.Month,
+                        Status = g.Key.Status.ToString(),
+                        Count = g.Count()
+                    })
+                    .OrderBy(x => x.Year)
+                    .ThenBy(x => x.Month)
+                    .ToListAsync();
+
+                // Top items with enhanced data - Fixed potential null reference
+                var topItems = await _context.DemandeItems
+                    .Include(di => di.Item)
+                    .Include(di => di.Demande)
+                        .ThenInclude(d => d.Paiement)
+                    .Where(di => di.Demande.DateDemande >= DateTime.Now.AddMonths(-6) && di.Item != null)
+                    .GroupBy(di => di.ItemId)
+                    .Select(g => new
+                    {
+                        Id = g.Key,
+                        Nom = g.First().Item.Nom ?? "",
+                        TotalQuantity = g.Sum(di => di.Quantite),
+                        TotalOrders = g.Count(),
+                        TotalValue = g.Sum(di => (di.PrixUnitaire ?? 0) * di.Quantite),
+                        AveragePrice = g.Where(di => di.PrixUnitaire.HasValue).Any()
+                            ? g.Where(di => di.PrixUnitaire.HasValue).Average(di => di.PrixUnitaire.Value)
+                            : 0,
+                        LastOrderDate = g.Max(di => di.Demande.DateDemande)
+                    })
+                    .OrderByDescending(x => x.TotalValue)
+                    .Take(10)
+                    .ToListAsync();
+
+                // Department/Category performance
+                var categoryPerformance = await _context.Demandes
+                    .Include(d => d.Categorie)
+                    .Include(d => d.Paiement)
+                    .Where(d => d.DateDemande >= DateTime.Now.AddMonths(-3) && d.Categorie != null)
+                    .GroupBy(d => d.CategorieId)
+                    .Select(g => new
+                    {
+                        CategoryId = g.Key,
+                        CategoryName = g.First().Categorie.Nom ?? "",
+                        TotalDemandes = g.Count(),
+                        TotalSpent = g.Sum(d => d.Paiement != null ? d.Paiement.MontantTotal : 0),
+                        ApprovalRate = g.Any() ? (double)g.Count(d => d.Statut == StatutDemande.Validee) / g.Count() * 100 : 0
+                    })
+                    .OrderByDescending(x => x.TotalSpent)
+                    .ToListAsync();
+
+                // User activity patterns - Fixed to work with EF Core
+                var userActivityPatterns = await _context.Demandes
+                    .Include(d => d.Utilisateur)
+                    .Include(d => d.Paiement)
+                    .Where(d => d.DateDemande >= DateTime.Now.AddMonths(-3))
+                    .ToListAsync(); // Load to memory first
+
+                var activityPatternsByHour = userActivityPatterns
+                    .GroupBy(d => d.DateDemande.Hour)
+                    .Select(g => new
+                    {
+                        Hour = g.Key,
+                        Count = g.Count(),
+                        AverageAmount = g.Where(d => d.Paiement != null).Any()
+                            ? g.Where(d => d.Paiement != null).Average(d => d.Paiement.MontantTotal)
+                            : 0
+                    })
+                    .OrderBy(x => x.Hour)
+                    .ToList();
+
+                // Peak usage analysis - Fixed to work with EF Core
+                var weekdayAnalysis = userActivityPatterns
+                    .GroupBy(d => d.DateDemande.DayOfWeek)
+                    .Select(g => new
+                    {
+                        DayOfWeek = g.Key.ToString(),
+                        Count = g.Count(),
+                        AverageAmount = g.Where(d => d.Paiement != null).Any()
+                            ? g.Where(d => d.Paiement != null).Average(d => d.Paiement.MontantTotal)
+                            : 0
+                    })
+                    .ToList();
+
                 var recentDemandes = await _context.Demandes
                     .Include(d => d.Utilisateur)
                     .Include(d => d.Categorie)
                     .Include(d => d.Paiement)
+                    .Include(d => d.DemandeItems)
+                    .Where(d => d.Utilisateur != null && d.Categorie != null)
                     .OrderByDescending(d => d.DateDemande)
                     .Take(10)
                     .Select(d => new
@@ -463,14 +587,16 @@ namespace Prelevements_par_caisse.Controllers
                         Statut = d.Statut.ToString(),
                         Utilisateur = new
                         {
-                            Nom = d.Utilisateur.Nom,
-                            Prenom = d.Utilisateur.Prenom
+                            Nom = d.Utilisateur.Nom ?? "",
+                            Prenom = d.Utilisateur.Prenom ?? "",
+                            IsFaveur = d.Utilisateur.Is_Faveur
                         },
                         Categorie = new
                         {
-                            Nom = d.Categorie.Nom
+                            Nom = d.Categorie.Nom ?? ""
                         },
-                        MontantTotal = d.Paiement != null ? d.Paiement.MontantTotal : 0
+                        MontantTotal = d.Paiement != null ? d.Paiement.MontantTotal : 0,
+                        ItemsCount = d.DemandeItems.Count
                     })
                     .ToListAsync();
 
@@ -482,105 +608,263 @@ namespace Prelevements_par_caisse.Controllers
                     DemandesParStatut = demandesParStatut,
                     TopUsers = topUsers,
                     TopCategories = topCategories,
-                    RecentDemandes = recentDemandes
+                    RecentDemandes = recentDemandes,
+                    MonthlyTrends = monthlyTrends,
+                    TopItems = topItems,
+                    DailyActivity = dailyActivity,
+                    StatusTrends = statusTrends,
+                    CategoryPerformance = categoryPerformance,
+                    UserActivityPatterns = activityPatternsByHour,
+                    WeekdayAnalysis = weekdayAnalysis
                 });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = $"Erreur serveur: {ex.Message}" });
+                return StatusCode(500, new { message = $"Erreur serveur: {ex.Message}", details = ex.InnerException?.Message });
             }
         }
 
-        [HttpGet("analytics/filtered")]
-        public async Task<IActionResult> GetFilteredAnalytics(
-            [FromQuery] DateTime? dateDebut,
-            [FromQuery] DateTime? dateFin,
-            [FromQuery] Guid? categorieId,
-            [FromQuery] Guid? itemId,
-            [FromQuery] Guid? utilisateurId,
-            [FromQuery] string statut)
+        // Fixed advanced analytics endpoint
+        [HttpGet("analytics/advanced")]
+        public async Task<IActionResult> GetAdvancedAnalytics()
         {
             try
             {
-                var query = _context.Demandes
-                    .Include(d => d.Utilisateur)
-                    .Include(d => d.Categorie)
-                    .Include(d => d.DemandeItems)
-                        .ThenInclude(di => di.Item)
+                // Financial insights
+                var currentYear = DateTime.Now.Year;
+                var yearlyComparison = new List<object>();
+                
+                for (int year = currentYear - 2; year <= currentYear; year++)
+                {
+                    var yearData = await _context.Demandes
+                        .Include(d => d.Paiement)
+                        .Where(d => d.DateDemande.Year == year)
+                        .Select(d => new
+                        {
+                            UtilisateurId = d.UtilisateurId,
+                            MontantTotal = d.Paiement != null ? d.Paiement.MontantTotal : 0
+                        })
+                        .ToListAsync();
+
+                    yearlyComparison.Add(new
+                    {
+                        Year = year,
+                        TotalDemandes = yearData.Count,
+                        TotalSpent = yearData.Sum(d => d.MontantTotal),
+                        AverageAmount = yearData.Any() ? yearData.Average(d => d.MontantTotal) : 0,
+                        UniqueUsers = yearData.Select(d => d.UtilisateurId).Distinct().Count()
+                    });
+                }
+
+                // User engagement metrics - Simplified
+                var userEngagement = new List<object>();
+                try
+                {
+                    var users = await _context.Users.Take(20).ToListAsync();
+                    foreach (var user in users)
+                    {
+                        var userDemandes = await _context.Demandes
+                            .Where(d => d.UtilisateurId == user.Id)
+                            .Include(d => d.Paiement)
+                            .ToListAsync();
+
+                        if (userDemandes.Any())
+                        {
+                            userEngagement.Add(new
+                            {
+                                UserId = user.Id,
+                                UserName = $"{user.Nom} {user.Prenom}",
+                                IsFaveur = user.Is_Faveur,
+                                TotalDemandes = userDemandes.Count,
+                                LastActivity = userDemandes.Max(d => d.DateDemande),
+                                TotalSpent = userDemandes.Sum(d => d.Paiement?.MontantTotal ?? 0),
+                                AvgMonthlyDemandes = userDemandes.Count(d => d.DateDemande >= DateTime.Now.AddMonths(-12)) / 12.0
+                            });
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"User engagement error: {ex.Message}");
+                }
+
+                // Predictive insights
+                var last6MonthsData = await _context.Demandes
                     .Include(d => d.Paiement)
-                    .AsQueryable();
+                    .Where(d => d.DateDemande >= DateTime.Now.AddMonths(-6))
+                    .ToListAsync();
 
-                if (dateDebut.HasValue)
-                    query = query.Where(d => d.DateDemande >= dateDebut.Value);
+                var predictiveInsights = new
+                {
+                    AvgMonthlyDemandes = last6MonthsData.Count / 6.0,
+                    AvgMonthlySpent = last6MonthsData.Sum(d => d.Paiement?.MontantTotal ?? 0) / 6.0m,
+                    ProjectedNextMonth = last6MonthsData.Count > 0 ? last6MonthsData.Count / 6.0 * 1.1 : 0,
+                    TrendDirection = last6MonthsData.Count > 0 ? "croissant" : "stable"
+                };
 
-                if (dateFin.HasValue)
-                    query = query.Where(d => d.DateDemande <= dateFin.Value.AddDays(1));
+                // Financial insights for the insights tab
+                var highValueRequests = await _context.Demandes
+                    .Include(d => d.Paiement)
+                    .Where(d => d.Paiement != null && d.Paiement.MontantTotal > 1000)
+                    .CountAsync();
 
-                if (categorieId.HasValue)
-                    query = query.Where(d => d.CategorieId == categorieId.Value);
+                var averageRequestValue = await _context.Paiements.AnyAsync() 
+                    ? await _context.Paiements.AverageAsync(p => p.MontantTotal)
+                    : 0;
 
-                if (itemId.HasValue)
-                    query = query.Where(d => d.DemandeItems.Any(di => di.ItemId == itemId.Value));
+                var currentMonth = DateTime.Now;
+                var lastMonth = currentMonth.AddMonths(-1);
 
-                if (utilisateurId.HasValue)
-                    query = query.Where(d => d.UtilisateurId == utilisateurId.Value);
+                var currentMonthSpent = await _context.Paiements
+                    .Where(p => p.DatePaiement.Year == currentMonth.Year && p.DatePaiement.Month == currentMonth.Month)
+                    .SumAsync(p => (decimal?)p.MontantTotal) ?? 0;
 
-                if (!string.IsNullOrEmpty(statut) && Enum.TryParse<StatutDemande>(statut, out var statutEnum))
-                    query = query.Where(d => d.Statut == statutEnum);
+                var lastMonthSpent = await _context.Paiements
+                    .Where(p => p.DatePaiement.Year == lastMonth.Year && p.DatePaiement.Month == lastMonth.Month)
+                    .SumAsync(p => (decimal?)p.MontantTotal) ?? 0;
 
-                var demandes = await query.ToListAsync();
+                var monthlyGrowthRate = lastMonthSpent > 0 
+                    ? ((double)(currentMonthSpent - lastMonthSpent) / (double)lastMonthSpent) * 100 
+                    : 0;
 
-                var totalDemandes = demandes.Count;
-                var totalSpent = demandes.Sum(d => d.Paiement?.MontantTotal ?? 0);
-                var totalUsers = demandes.Select(d => d.UtilisateurId).Distinct().Count();
-                var averagePerDemande = totalDemandes > 0 ? totalSpent / totalDemandes : 0;
-
-                var demandesParStatut = demandes
-                    .GroupBy(d => d.Statut)
-                    .ToDictionary(g => g.Key.ToString(), g => g.Count());
-
-                var topUsers = demandes
-                    .GroupBy(d => d.UtilisateurId)
+                // Top spending departments
+                var topSpendingDepartments = await _context.Demandes
+                    .Include(d => d.Utilisateur)
+                    .Include(d => d.Paiement)
+                    .Where(d => d.DateDemande >= DateTime.Now.AddMonths(-6) && d.Utilisateur != null)
+                    .GroupBy(d => d.Utilisateur.Is_Faveur)
                     .Select(g => new
                     {
-                        Id = g.Key,
-                        Nom = g.First().Utilisateur.Nom,
-                        Prenom = g.First().Utilisateur.Prenom,
-                        Email = g.First().Utilisateur.Email,
-                        TotalDemandes = g.Count(),
-                        TotalSpent = g.Sum(d => d.Paiement?.MontantTotal ?? 0)
+                        Department = g.Key ? "Faveur" : "Regular",
+                        RequestCount = g.Count(),
+                        TotalSpent = g.Sum(d => d.Paiement != null ? d.Paiement.MontantTotal : 0)
                     })
                     .OrderByDescending(x => x.TotalSpent)
-                    .Take(10)
-                    .ToList();
+                    .ToListAsync();
 
-                var topCategories = demandes
-                    .GroupBy(d => d.CategorieId)
+                // Activity patterns - Fixed by loading to memory first
+                var activityData = await _context.Demandes
+                    .Where(d => d.DateDemande >= DateTime.Now.AddMonths(-3))
+                    .ToListAsync();
+
+                var activityPatterns = activityData
+                    .GroupBy(d => new { 
+                        DayOfWeek = d.DateDemande.DayOfWeek,
+                        Hour = d.DateDemande.Hour 
+                    })
                     .Select(g => new
                     {
-                        Id = g.Key,
-                        Nom = g.First().Categorie.Nom,
-                        TotalDemandes = g.Count(),
-                        TotalSpent = g.Sum(d => d.Paiement?.MontantTotal ?? 0)
+                        DayOfWeek = g.Key.DayOfWeek.ToString(),
+                        Hour = g.Key.Hour,
+                        RequestCount = g.Count()
                     })
-                    .OrderByDescending(x => x.TotalSpent)
-                    .Take(10)
                     .ToList();
 
                 return Ok(new
                 {
-                    TotalDemandes = totalDemandes,
-                    TotalSpent = totalSpent,
-                    TotalUsers = totalUsers,
-                    AveragePerDemande = averagePerDemande,
-                    DemandesParStatut = demandesParStatut,
-                    TopUsers = topUsers,
-                    TopCategories = topCategories
+                    YearlyComparison = yearlyComparison,
+                    UserEngagement = userEngagement.OrderByDescending(x => ((dynamic)x).TotalSpent).Take(20),
+                    PredictiveInsights = predictiveInsights,
+                    FinancialInsights = new
+                    {
+                        HighValueRequests = highValueRequests,
+                        AverageRequestValue = averageRequestValue,
+                        MonthlyGrowthRate = monthlyGrowthRate,
+                        TopSpendingDepartments = topSpendingDepartments
+                    },
+                    ActivityPatterns = activityPatterns
                 });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = $"Erreur serveur: {ex.Message}" });
+                return StatusCode(500, new { message = $"Erreur serveur: {ex.Message}", details = ex.InnerException?.Message });
+            }
+        }
+
+        // Fixed performance endpoint
+        [HttpGet("analytics/performance")]
+        public async Task<IActionResult> GetPerformanceMetrics()
+        {
+            try
+            {
+                var totalDemandes = await _context.Demandes.CountAsync();
+                var approvedDemandes = await _context.Demandes.CountAsync(d => d.Statut == StatutDemande.Validee);
+                var rejectedDemandes = await _context.Demandes.CountAsync(d => d.Statut == StatutDemande.Refusee);
+                var pendingDemandes = await _context.Demandes.CountAsync(d => d.Statut == StatutDemande.EnAttente);
+
+                var approvalRate = totalDemandes > 0 ? (double)approvedDemandes / totalDemandes * 100 : 0;
+                var rejectionRate = totalDemandes > 0 ? (double)rejectedDemandes / totalDemandes * 100 : 0;
+
+                // Calculate average processing time
+                var processedDemandes = await _context.Demandes
+                    .Include(d => d.Paiement)
+                    .Where(d => d.Statut == StatutDemande.Validee && d.Paiement != null)
+                    .Select(d => new
+                    {
+                        RequestDate = d.DateDemande,
+                        ProcessedDate = d.Paiement.DatePaiement
+                    })
+                    .ToListAsync();
+
+                var avgProcessingTime = processedDemandes.Any() 
+                    ? processedDemandes.Average(d => (d.ProcessedDate - d.RequestDate).TotalDays)
+                    : 0;
+
+                // Weekly comparison
+                var thisWeekStart = DateTime.Now.AddDays(-(int)DateTime.Now.DayOfWeek);
+                var lastWeekStart = thisWeekStart.AddDays(-7);
+
+                var thisWeekData = await _context.Demandes
+                    .Include(d => d.Paiement)
+                    .Where(d => d.DateDemande >= thisWeekStart)
+                    .ToListAsync();
+
+                var lastWeekData = await _context.Demandes
+                    .Include(d => d.Paiement)
+                    .Where(d => d.DateDemande >= lastWeekStart && d.DateDemande < thisWeekStart)
+                    .ToListAsync();
+
+                var weeklyComparison = new[]
+                {
+                    new { 
+                        Period = "This Week", 
+                        Count = thisWeekData.Count, 
+                        TotalValue = thisWeekData.Sum(d => d.Paiement?.MontantTotal ?? 0) 
+                    },
+                    new { 
+                        Period = "Last Week", 
+                        Count = lastWeekData.Count, 
+                        TotalValue = lastWeekData.Sum(d => d.Paiement?.MontantTotal ?? 0) 
+                    }
+                };
+
+                // System health
+                var totalUsers = await _context.Users.CountAsync();
+                var activeCategories = await _context.Categories.CountAsync();
+                var activeItems = await _context.Items.CountAsync();
+                var lastWeekActivity = await _context.Demandes
+                    .Where(d => d.DateDemande >= DateTime.Now.AddDays(-7))
+                    .CountAsync();
+
+                return Ok(new
+                {
+                    ApprovalRate = Math.Round(approvalRate, 1),
+                    RejectionRate = Math.Round(rejectionRate, 1),
+                    AvgProcessingTime = Math.Round(avgProcessingTime, 1),
+                    PendingRequests = pendingDemandes,
+                    WeeklyComparison = weeklyComparison,
+                    SystemHealth = new
+                    {
+                        TotalUsers = totalUsers,
+                        ActiveCategories = activeCategories,
+                        ActiveItems = activeItems,
+                        LastWeekActivity = lastWeekActivity
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = $"Erreur serveur: {ex.Message}", details = ex.InnerException?.Message });
             }
         }
 
@@ -593,9 +877,9 @@ namespace Prelevements_par_caisse.Controllers
                     .Select(u => new
                     {
                         Id = u.Id,
-                        Nom = u.Nom,
-                        Prenom = u.Prenom,
-                        Email = u.Email
+                        Nom = u.Nom ?? "",
+                        Prenom = u.Prenom ?? "",
+                        Email = u.Email ?? ""
                     })
                     .OrderBy(u => u.Nom)
                     .ToListAsync();
@@ -604,12 +888,188 @@ namespace Prelevements_par_caisse.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = $"Erreur serveur: {ex.Message}" });
+                return StatusCode(500, new { message = $"Erreur serveur: {ex.Message}", details = ex.InnerException?.Message });
             }
         }
 
+        [HttpGet("statistics/summary")]
+        public async Task<IActionResult> GetStatisticsSummary()
+        {
+            try
+            {
+                var currentMonth = DateTime.Now;
+                var lastMonth = currentMonth.AddMonths(-1);
+                var currentYear = DateTime.Now.Year;
 
+                // Current month stats
+                var currentMonthDemandes = await _context.Demandes
+                    .Where(d => d.DateDemande.Year == currentMonth.Year && d.DateDemande.Month == currentMonth.Month)
+                    .CountAsync();
 
+                var currentMonthSpent = await _context.Paiements
+                    .Where(p => p.DatePaiement.Year == currentMonth.Year && 
+                               p.DatePaiement.Month == currentMonth.Month)
+                    .SumAsync(p => (decimal?)p.MontantTotal) ?? 0;
 
+                // Last month stats
+                var lastMonthDemandes = await _context.Demandes
+                    .Where(d => d.DateDemande.Year == lastMonth.Year && d.DateDemande.Month == lastMonth.Month)
+                    .CountAsync();
+
+                var lastMonthSpent = await _context.Paiements
+                    .Where(p => p.DatePaiement.Year == lastMonth.Year && 
+                               p.DatePaiement.Month == lastMonth.Month)
+                    .SumAsync(p => (decimal?)p.MontantTotal) ?? 0;
+
+                // Calculate growth percentages
+                var demandesGrowth = lastMonthDemandes > 0 
+                    ? ((double)(currentMonthDemandes - lastMonthDemandes) / lastMonthDemandes) * 100 
+                    : 0;
+
+                var spentGrowth = lastMonthSpent > 0 
+                    ? ((double)(currentMonthSpent - lastMonthSpent) / (double)lastMonthSpent) * 100 
+                    : 0;
+
+                // Year stats
+                var yearlyDemandes = await _context.Demandes
+                    .Where(d => d.DateDemande.Year == currentYear)
+                    .CountAsync();
+
+                var yearlySpent = await _context.Paiements
+                    .Where(p => p.DatePaiement.Year == currentYear)
+                    .SumAsync(p => (decimal?)p.MontantTotal) ?? 0;
+
+                // Pending requests requiring attention
+                var pendingRequests = await _context.Demandes
+                    .Where(d => d.Statut == StatutDemande.EnAttente)
+                    .CountAsync();
+
+                // Faveur users stats
+                var faveurUsers = await _context.Users.Where(u => u.Is_Faveur).CountAsync();
+                var totalUsers = await _context.Users.CountAsync();
+
+                return Ok(new
+                {
+                    CurrentMonth = new
+                    {
+                        Demandes = currentMonthDemandes,
+                        Spent = currentMonthSpent
+                    },
+                    LastMonth = new
+                    {
+                        Demandes = lastMonthDemandes,
+                        Spent = lastMonthSpent
+                    },
+                    Growth = new
+                    {
+                        Demandes = Math.Round(demandesGrowth, 2),
+                        Spent = Math.Round(spentGrowth, 2)
+                    },
+                    Yearly = new
+                    {
+                        Demandes = yearlyDemandes,
+                        Spent = yearlySpent
+                    },
+                    PendingRequests = pendingRequests,
+                    FaveurUsers = faveurUsers,
+                    TotalUsers = totalUsers
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = $"Erreur serveur: {ex.Message}", details = ex.InnerException?.Message });
+            }
+        }
+
+        // Simplified export endpoint - no complex filtering required
+        [HttpGet("export/excel")]
+        public async Task<IActionResult> ExportToExcel(
+            [FromQuery] Guid? categorieId,
+            [FromQuery] Guid? utilisateurId)
+        {
+            try
+            {
+                var query = _context.Demandes
+                    .Include(d => d.Utilisateur)
+                    .Include(d => d.Categorie)
+                    .Include(d => d.DemandeItems)
+                        .ThenInclude(di => di.Item)
+                    .Include(d => d.Paiement)
+                    .AsQueryable();
+
+                // Apply simple filters if provided
+                if (categorieId.HasValue && categorieId.Value != Guid.Empty)
+                {
+                    query = query.Where(d => d.CategorieId == categorieId.Value);
+                }
+
+                if (utilisateurId.HasValue && utilisateurId.Value != Guid.Empty)
+                {
+                    query = query.Where(d => d.UtilisateurId == utilisateurId.Value);
+                }
+
+                // Execute query
+                var demandes = await query.OrderByDescending(d => d.DateDemande).ToListAsync();
+
+                // Prepare export data
+                var exportData = demandes.Select(d => new
+                {
+                    DateDemande = d.DateDemande.ToString("dd/MM/yyyy HH:mm"),
+                    Statut = d.Statut.ToString(),
+                    Utilisateur = $"{d.Utilisateur?.Nom ?? ""} {d.Utilisateur?.Prenom ?? ""}",
+                    Email = d.Utilisateur?.Email ?? "N/A",
+                    EstFaveur = d.Utilisateur?.Is_Faveur == true ? "Oui" : "Non",
+                    Categorie = d.Categorie?.Nom ?? "N/A",
+                    NombreItems = d.DemandeItems?.Count ?? 0,
+                    Items = d.DemandeItems != null && d.DemandeItems.Any() 
+                        ? string.Join("; ", d.DemandeItems.Select(di => 
+                            $"{di.Item?.Nom ?? "Article inconnu"} - Qté: {di.Quantite}" + 
+                            (di.PrixUnitaire.HasValue ? $" - Prix: {di.PrixUnitaire.Value:F2} TND" : "") +
+                            (!string.IsNullOrEmpty(di.Description) ? $" - Desc: {di.Description}" : "")
+                          ))
+                        : "Aucun article",
+                    MontantTotal = d.Paiement?.MontantTotal.ToString("F2") ?? "0.00",
+                    MontantEnLettres = d.Paiement?.MontantEnLettres ?? "N/A",
+                    ComptePaiement = d.Paiement?.ComptePaiement ?? "N/A",
+                    DatePaiement = d.Paiement?.DatePaiement.ToString("dd/MM/yyyy HH:mm") ?? "N/A",
+                    EffectuePar = d.Paiement?.EffectuePar ?? "N/A"
+                }).ToList();
+
+                // Create filter description
+                string filterDescription = "Toutes les demandes";
+                if (categorieId.HasValue && categorieId.Value != Guid.Empty)
+                {
+                    var categorie = await _context.Categories.FindAsync(categorieId.Value);
+                    filterDescription = $"Catégorie: {categorie?.Nom ?? "Inconnue"}";
+                }
+                if (utilisateurId.HasValue && utilisateurId.Value != Guid.Empty)
+                {
+                    var user = await _context.Users.FindAsync(utilisateurId.Value);
+                    filterDescription = $"Utilisateur: {user?.Nom} {user?.Prenom}";
+                }
+
+                return Ok(new
+                {
+                    success = true,
+                    data = exportData,
+                    totalRecords = exportData.Count,
+                    exportDate = DateTime.Now.ToString("dd/MM/yyyy HH:mm"),
+                    exportType = filterDescription,
+                    filters = new
+                    {
+                        CategorieId = categorieId,
+                        UtilisateurId = utilisateurId
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { 
+                    success = false,
+                    message = $"Erreur serveur lors de l'export: {ex.Message}",
+                    details = ex.InnerException?.Message
+                });
+            }
+        }
     }
 }
