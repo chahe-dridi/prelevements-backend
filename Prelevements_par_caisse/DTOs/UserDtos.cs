@@ -10,6 +10,8 @@ namespace Prelevements_par_caisse.DTOs
         public string Prenom { get; set; }
         public string Email { get; set; }
         public UserRole Role { get; set; }
+
+        public bool Is_Faveur { get; set; }
     }
 
     public class UpdateProfileDto
@@ -33,6 +35,10 @@ namespace Prelevements_par_caisse.DTOs
         public string Prenom { get; set; }
         public string Email { get; set; }
         public UserRole? Role { get; set; } // nullable so role is optional
+
+
+        public bool? Is_Faveur { get; set; } // Add this field
+
 
         public string? Password { get; set; }
         public string? ConfirmPassword { get; set; }

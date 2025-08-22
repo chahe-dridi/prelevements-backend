@@ -15,7 +15,16 @@ namespace Prelevements_par_caisse.DTOs
         public string EffectuePar { get; set; }
 
         public string? Statut { get; set; }
-    }
 
+
+
+        public List<DemandeItemPriceDto> DemandeItems { get; set; } = new List<DemandeItemPriceDto>();
+
+    }
+    public class DemandeItemPriceDto
+    {
+        public Guid Id { get; set; }
+        public decimal? PrixUnitaire { get; set; }
+    }
 
 }

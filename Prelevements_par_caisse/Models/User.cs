@@ -31,7 +31,7 @@ namespace Prelevements_par_caisse.Models
         public UserRole Role { get; set; } = UserRole.Utilisateur;
 
 
-
+         public bool Is_Faveur { get; set; } = false;
 
         public ICollection<Demande> Demandes { get; set; } = new List<Demande>();
 
