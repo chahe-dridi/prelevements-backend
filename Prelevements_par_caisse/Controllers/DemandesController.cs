@@ -177,6 +177,7 @@ namespace Prelevements_par_caisse.Controllers
                         {
                             Id = di.Id,
                             Quantite = di.Quantite,
+                            PrixUnitaire = di.PrixUnitaire,
                             ItemId = di.ItemId,
                             Item = new
                             {
@@ -255,6 +256,7 @@ namespace Prelevements_par_caisse.Controllers
                         {
                             di.Id,
                             di.Quantite,
+                            di.PrixUnitaire,
                             di.ItemId,
                             Item = new
                             {
@@ -348,6 +350,7 @@ namespace Prelevements_par_caisse.Controllers
                     {
                         Demande = demande,
                         ItemId = demandeItemDto.ItemId,
+                         PrixUnitaire = demandeItemDto.PrixUnitaire,
                         Quantite = demandeItemDto.Quantite
                     });
                 }
