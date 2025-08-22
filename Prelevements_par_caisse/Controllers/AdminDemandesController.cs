@@ -458,8 +458,8 @@ namespace Prelevements_par_caisse.Controllers
                         ApprovedCount = g.Count(d => d.Statut == StatutDemande.Validee),
                         PendingCount = g.Count(d => d.Statut == StatutDemande.EnAttente),
                         RejectedCount = g.Count(d => d.Statut == StatutDemande.Refusee),
-                        AverageAmount = g.Where(d => d.Paiement != null).Any() 
-                            ? g.Where(d => d.Paiement != null).Average(d => d.Paiement.MontantTotal) 
+                        AverageAmount = g.Where(d => d.Paiement != null).Any()
+                            ? g.Where(d => d.Paiement != null).Average(d => d.Paiement.MontantTotal)
                             : 0
                     })
                     .OrderBy(x => x.Year)
@@ -483,8 +483,9 @@ namespace Prelevements_par_caisse.Controllers
                 // Status distribution over time
                 var statusTrends = await _context.Demandes
                     .Where(d => d.DateDemande >= DateTime.Now.AddMonths(-6))
-                    .GroupBy(d => new { 
-                        Year = d.DateDemande.Year, 
+                    .GroupBy(d => new
+                    {
+                        Year = d.DateDemande.Year,
                         Month = d.DateDemande.Month,
                         Status = d.Statut
                     })
@@ -633,7 +634,7 @@ namespace Prelevements_par_caisse.Controllers
                 // Financial insights
                 var currentYear = DateTime.Now.Year;
                 var yearlyComparison = new List<object>();
-                
+
                 for (int year = currentYear - 2; year <= currentYear; year++)
                 {
                     var yearData = await _context.Demandes
@@ -708,7 +709,7 @@ namespace Prelevements_par_caisse.Controllers
                     .Where(d => d.Paiement != null && d.Paiement.MontantTotal > 1000)
                     .CountAsync();
 
-                var averageRequestValue = await _context.Paiements.AnyAsync() 
+                var averageRequestValue = await _context.Paiements.AnyAsync()
                     ? await _context.Paiements.AverageAsync(p => p.MontantTotal)
                     : 0;
 
@@ -723,8 +724,8 @@ namespace Prelevements_par_caisse.Controllers
                     .Where(p => p.DatePaiement.Year == lastMonth.Year && p.DatePaiement.Month == lastMonth.Month)
                     .SumAsync(p => (decimal?)p.MontantTotal) ?? 0;
 
-                var monthlyGrowthRate = lastMonthSpent > 0 
-                    ? ((double)(currentMonthSpent - lastMonthSpent) / (double)lastMonthSpent) * 100 
+                var monthlyGrowthRate = lastMonthSpent > 0
+                    ? ((double)(currentMonthSpent - lastMonthSpent) / (double)lastMonthSpent) * 100
                     : 0;
 
                 // Top spending departments
@@ -748,9 +749,10 @@ namespace Prelevements_par_caisse.Controllers
                     .ToListAsync();
 
                 var activityPatterns = activityData
-                    .GroupBy(d => new { 
+                    .GroupBy(d => new
+                    {
                         DayOfWeek = d.DateDemande.DayOfWeek,
-                        Hour = d.DateDemande.Hour 
+                        Hour = d.DateDemande.Hour
                     })
                     .Select(g => new
                     {
@@ -806,7 +808,7 @@ namespace Prelevements_par_caisse.Controllers
                     })
                     .ToListAsync();
 
-                var avgProcessingTime = processedDemandes.Any() 
+                var avgProcessingTime = processedDemandes.Any()
                     ? processedDemandes.Average(d => (d.ProcessedDate - d.RequestDate).TotalDays)
                     : 0;
 
@@ -826,15 +828,15 @@ namespace Prelevements_par_caisse.Controllers
 
                 var weeklyComparison = new[]
                 {
-                    new { 
-                        Period = "This Week", 
-                        Count = thisWeekData.Count, 
-                        TotalValue = thisWeekData.Sum(d => d.Paiement?.MontantTotal ?? 0) 
+                    new {
+                        Period = "This Week",
+                        Count = thisWeekData.Count,
+                        TotalValue = thisWeekData.Sum(d => d.Paiement?.MontantTotal ?? 0)
                     },
-                    new { 
-                        Period = "Last Week", 
-                        Count = lastWeekData.Count, 
-                        TotalValue = lastWeekData.Sum(d => d.Paiement?.MontantTotal ?? 0) 
+                    new {
+                        Period = "Last Week",
+                        Count = lastWeekData.Count,
+                        TotalValue = lastWeekData.Sum(d => d.Paiement?.MontantTotal ?? 0)
                     }
                 };
 
@@ -892,6 +894,72 @@ namespace Prelevements_par_caisse.Controllers
             }
         }
 
+
+
+
+ // New endpoint to get items by category
+        [HttpGet("items")]
+        public async Task<IActionResult> GetItems([FromQuery] Guid? categorieId = null)
+        {
+            try
+            {
+                var query = _context.Items.AsQueryable();
+
+                // Filter by category if provided
+                if (categorieId.HasValue && categorieId.Value != Guid.Empty)
+                {
+                    query = query.Where(i => i.CategorieId == categorieId.Value);
+                }
+
+                var items = await query
+                    .Include(i => i.Categorie)
+                    .Select(i => new
+                    {
+                        Id = i.Id,
+                        Nom = i.Nom ?? "",
+                      
+                        CategorieId = i.CategorieId,
+                        CategorieName = i.Categorie != null ? i.Categorie.Nom : "N/A"
+                    })
+                    .OrderBy(i => i.Nom)
+                    .ToListAsync();
+
+                return Ok(items);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = $"Erreur serveur: {ex.Message}", details = ex.InnerException?.Message });
+            }
+        }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         [HttpGet("statistics/summary")]
         public async Task<IActionResult> GetStatisticsSummary()
         {
@@ -907,7 +975,7 @@ namespace Prelevements_par_caisse.Controllers
                     .CountAsync();
 
                 var currentMonthSpent = await _context.Paiements
-                    .Where(p => p.DatePaiement.Year == currentMonth.Year && 
+                    .Where(p => p.DatePaiement.Year == currentMonth.Year &&
                                p.DatePaiement.Month == currentMonth.Month)
                     .SumAsync(p => (decimal?)p.MontantTotal) ?? 0;
 
@@ -917,17 +985,17 @@ namespace Prelevements_par_caisse.Controllers
                     .CountAsync();
 
                 var lastMonthSpent = await _context.Paiements
-                    .Where(p => p.DatePaiement.Year == lastMonth.Year && 
+                    .Where(p => p.DatePaiement.Year == lastMonth.Year &&
                                p.DatePaiement.Month == lastMonth.Month)
                     .SumAsync(p => (decimal?)p.MontantTotal) ?? 0;
 
                 // Calculate growth percentages
-                var demandesGrowth = lastMonthDemandes > 0 
-                    ? ((double)(currentMonthDemandes - lastMonthDemandes) / lastMonthDemandes) * 100 
+                var demandesGrowth = lastMonthDemandes > 0
+                    ? ((double)(currentMonthDemandes - lastMonthDemandes) / lastMonthDemandes) * 100
                     : 0;
 
-                var spentGrowth = lastMonthSpent > 0 
-                    ? ((double)(currentMonthSpent - lastMonthSpent) / (double)lastMonthSpent) * 100 
+                var spentGrowth = lastMonthSpent > 0
+                    ? ((double)(currentMonthSpent - lastMonthSpent) / (double)lastMonthSpent) * 100
                     : 0;
 
                 // Year stats
@@ -982,7 +1050,7 @@ namespace Prelevements_par_caisse.Controllers
         }
 
         // Simplified export endpoint - no complex filtering required
-        [HttpGet("export/excel")]
+     /**   [HttpGet("export/excel")]
         public async Task<IActionResult> ExportToExcel(
             [FromQuery] Guid? categorieId,
             [FromQuery] Guid? utilisateurId)
@@ -1021,9 +1089,9 @@ namespace Prelevements_par_caisse.Controllers
                     EstFaveur = d.Utilisateur?.Is_Faveur == true ? "Oui" : "Non",
                     Categorie = d.Categorie?.Nom ?? "N/A",
                     NombreItems = d.DemandeItems?.Count ?? 0,
-                    Items = d.DemandeItems != null && d.DemandeItems.Any() 
-                        ? string.Join("; ", d.DemandeItems.Select(di => 
-                            $"{di.Item?.Nom ?? "Article inconnu"} - Qté: {di.Quantite}" + 
+                    Items = d.DemandeItems != null && d.DemandeItems.Any()
+                        ? string.Join("; ", d.DemandeItems.Select(di =>
+                            $"{di.Item?.Nom ?? "Article inconnu"} - Qté: {di.Quantite}" +
                             (di.PrixUnitaire.HasValue ? $" - Prix: {di.PrixUnitaire.Value:F2} TND" : "") +
                             (!string.IsNullOrEmpty(di.Description) ? $" - Desc: {di.Description}" : "")
                           ))
@@ -1064,6 +1132,119 @@ namespace Prelevements_par_caisse.Controllers
             }
             catch (Exception ex)
             {
+                return StatusCode(500, new
+                {
+                    success = false,
+                    message = $"Erreur serveur lors de l'export: {ex.Message}",
+                    details = ex.InnerException?.Message
+                });
+            }
+        }
+        
+*/
+
+      [HttpGet("export/excel")]
+        public async Task<IActionResult> ExportToExcel(
+            [FromQuery] Guid? categorieId,
+            [FromQuery] Guid? utilisateurId,
+            [FromQuery] Guid? itemId)
+        {
+            try
+            {
+                var query = _context.Demandes
+                    .Include(d => d.Utilisateur)
+                    .Include(d => d.Categorie)
+                    .Include(d => d.DemandeItems)
+                        .ThenInclude(di => di.Item)
+                    .Include(d => d.Paiement)
+                    .AsQueryable();
+
+                // Apply filters if provided
+                if (categorieId.HasValue && categorieId.Value != Guid.Empty)
+                {
+                    query = query.Where(d => d.CategorieId == categorieId.Value);
+                }
+
+                if (utilisateurId.HasValue && utilisateurId.Value != Guid.Empty)
+                {
+                    query = query.Where(d => d.UtilisateurId == utilisateurId.Value);
+                }
+
+                // Filter by specific item if provided
+                if (itemId.HasValue && itemId.Value != Guid.Empty)
+                {
+                    query = query.Where(d => d.DemandeItems.Any(di => di.ItemId == itemId.Value));
+                }
+
+                // Execute query
+                var demandes = await query.OrderByDescending(d => d.DateDemande).ToListAsync();
+
+                // Prepare export data
+                var exportData = demandes.Select(d => new
+                {
+                    DateDemande = d.DateDemande.ToString("dd/MM/yyyy HH:mm"),
+                    Statut = d.Statut.ToString(),
+                    Utilisateur = $"{d.Utilisateur?.Nom ?? ""} {d.Utilisateur?.Prenom ?? ""}",
+                    Email = d.Utilisateur?.Email ?? "N/A",
+                    EstFaveur = d.Utilisateur?.Is_Faveur == true ? "Oui" : "Non",
+                    Categorie = d.Categorie?.Nom ?? "N/A",
+                    NombreItems = d.DemandeItems?.Count ?? 0,
+                    Items = d.DemandeItems != null && d.DemandeItems.Any() 
+                        ? string.Join("; ", d.DemandeItems
+                            .Where(di => !itemId.HasValue || di.ItemId == itemId.Value) // Filter items if specific item selected
+                            .Select(di => 
+                                $"{di.Item?.Nom ?? "Article inconnu"} - Qté: {di.Quantite}" + 
+                                (di.PrixUnitaire.HasValue ? $" - Prix: {di.PrixUnitaire.Value:F2} TND" : "") +
+                                (!string.IsNullOrEmpty(di.Description) ? $" - Desc: {di.Description}" : "")
+                            ))
+                        : "Aucun article",
+                    MontantTotal = d.Paiement?.MontantTotal.ToString("F2") ?? "0.00",
+                    MontantEnLettres = d.Paiement?.MontantEnLettres ?? "N/A",
+                    ComptePaiement = d.Paiement?.ComptePaiement ?? "N/A",
+                    DatePaiement = d.Paiement?.DatePaiement.ToString("dd/MM/yyyy HH:mm") ?? "N/A",
+                    EffectuePar = d.Paiement?.EffectuePar ?? "N/A"
+                }).ToList();
+
+                // Create filter description
+                var filterParts = new List<string>();
+                
+                if (categorieId.HasValue && categorieId.Value != Guid.Empty)
+                {
+                    var categorie = await _context.Categories.FindAsync(categorieId.Value);
+                    filterParts.Add($"Catégorie: {categorie?.Nom ?? "Inconnue"}");
+                }
+                
+                if (utilisateurId.HasValue && utilisateurId.Value != Guid.Empty)
+                {
+                    var user = await _context.Users.FindAsync(utilisateurId.Value);
+                    filterParts.Add($"Utilisateur: {user?.Nom} {user?.Prenom}");
+                }
+                
+                if (itemId.HasValue && itemId.Value != Guid.Empty)
+                {
+                    var item = await _context.Items.FindAsync(itemId.Value);
+                    filterParts.Add($"Article: {item?.Nom ?? "Inconnu"}");
+                }
+
+                string filterDescription = filterParts.Any() ? string.Join(", ", filterParts) : "Toutes les demandes";
+
+                return Ok(new
+                {
+                    success = true,
+                    data = exportData,
+                    totalRecords = exportData.Count,
+                    exportDate = DateTime.Now.ToString("dd/MM/yyyy HH:mm"),
+                    exportType = filterDescription,
+                    filters = new
+                    {
+                        CategorieId = categorieId,
+                        UtilisateurId = utilisateurId,
+                        ItemId = itemId
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
                 return StatusCode(500, new { 
                     success = false,
                     message = $"Erreur serveur lors de l'export: {ex.Message}",
@@ -1071,5 +1252,16 @@ namespace Prelevements_par_caisse.Controllers
                 });
             }
         }
+
+
+
+
+
+
+
+
+
+
+
     }
 }
