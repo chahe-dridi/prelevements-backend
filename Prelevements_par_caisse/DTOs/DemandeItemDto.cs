@@ -9,6 +9,10 @@ namespace Prelevements_par_caisse.DTOs
 
 
         public decimal? PrixUnitaire { get; set; }
+        
+        public string? Description { get; set; }
+
+
 
     }
 }

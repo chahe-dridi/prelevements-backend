@@ -23,6 +23,8 @@ namespace Prelevements_par_caisse.Models
 
         public decimal? PrixUnitaire { get; set; }
 
-        
+        [MaxLength(500)]
+        public string? Description { get; set; }
+
     }
 }
