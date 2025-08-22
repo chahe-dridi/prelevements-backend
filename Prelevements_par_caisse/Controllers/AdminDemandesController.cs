@@ -401,10 +401,212 @@ namespace Prelevements_par_caisse.Controllers
 
 
 
- 
 
 
 
+        [HttpGet("analytics")]
+        public async Task<IActionResult> GetAnalytics()
+        {
+            try
+            {
+                var totalDemandes = await _context.Demandes.CountAsync();
+                var totalSpent = await _context.Paiements.SumAsync(p => p.MontantTotal);
+                var totalUsers = await _context.Users.CountAsync();
+
+                var demandesParStatut = await _context.Demandes
+                    .GroupBy(d => d.Statut)
+                    .Select(g => new { Statut = g.Key.ToString(), Count = g.Count() })
+                    .ToDictionaryAsync(x => x.Statut, x => x.Count);
+
+                var topUsers = await _context.Demandes
+                    .Include(d => d.Utilisateur)
+                    .Include(d => d.Paiement)
+                    .GroupBy(d => d.UtilisateurId)
+                    .Select(g => new
+                    {
+                        Id = g.Key,
+                        Nom = g.First().Utilisateur.Nom,
+                        Prenom = g.First().Utilisateur.Prenom,
+                        Email = g.First().Utilisateur.Email,
+                        TotalDemandes = g.Count(),
+                        TotalSpent = g.Sum(d => d.Paiement != null ? d.Paiement.MontantTotal : 0)
+                    })
+                    .OrderByDescending(x => x.TotalSpent)
+                    .Take(10)
+                    .ToListAsync();
+
+                var topCategories = await _context.Demandes
+                    .Include(d => d.Categorie)
+                    .Include(d => d.Paiement)
+                    .GroupBy(d => d.CategorieId)
+                    .Select(g => new
+                    {
+                        Id = g.Key,
+                        Nom = g.First().Categorie.Nom,
+                        TotalDemandes = g.Count(),
+                        TotalSpent = g.Sum(d => d.Paiement != null ? d.Paiement.MontantTotal : 0)
+                    })
+                    .OrderByDescending(x => x.TotalSpent)
+                    .Take(10)
+                    .ToListAsync();
+
+                var recentDemandes = await _context.Demandes
+                    .Include(d => d.Utilisateur)
+                    .Include(d => d.Categorie)
+                    .Include(d => d.Paiement)
+                    .OrderByDescending(d => d.DateDemande)
+                    .Take(10)
+                    .Select(d => new
+                    {
+                        Id = d.Id,
+                        DateDemande = d.DateDemande,
+                        Statut = d.Statut.ToString(),
+                        Utilisateur = new
+                        {
+                            Nom = d.Utilisateur.Nom,
+                            Prenom = d.Utilisateur.Prenom
+                        },
+                        Categorie = new
+                        {
+                            Nom = d.Categorie.Nom
+                        },
+                        MontantTotal = d.Paiement != null ? d.Paiement.MontantTotal : 0
+                    })
+                    .ToListAsync();
+
+                return Ok(new
+                {
+                    TotalDemandes = totalDemandes,
+                    TotalSpent = totalSpent,
+                    TotalUsers = totalUsers,
+                    DemandesParStatut = demandesParStatut,
+                    TopUsers = topUsers,
+                    TopCategories = topCategories,
+                    RecentDemandes = recentDemandes
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = $"Erreur serveur: {ex.Message}" });
+            }
+        }
+
+        [HttpGet("analytics/filtered")]
+        public async Task<IActionResult> GetFilteredAnalytics(
+            [FromQuery] DateTime? dateDebut,
+            [FromQuery] DateTime? dateFin,
+            [FromQuery] Guid? categorieId,
+            [FromQuery] Guid? itemId,
+            [FromQuery] Guid? utilisateurId,
+            [FromQuery] string statut)
+        {
+            try
+            {
+                var query = _context.Demandes
+                    .Include(d => d.Utilisateur)
+                    .Include(d => d.Categorie)
+                    .Include(d => d.DemandeItems)
+                        .ThenInclude(di => di.Item)
+                    .Include(d => d.Paiement)
+                    .AsQueryable();
+
+                if (dateDebut.HasValue)
+                    query = query.Where(d => d.DateDemande >= dateDebut.Value);
+
+                if (dateFin.HasValue)
+                    query = query.Where(d => d.DateDemande <= dateFin.Value.AddDays(1));
+
+                if (categorieId.HasValue)
+                    query = query.Where(d => d.CategorieId == categorieId.Value);
+
+                if (itemId.HasValue)
+                    query = query.Where(d => d.DemandeItems.Any(di => di.ItemId == itemId.Value));
+
+                if (utilisateurId.HasValue)
+                    query = query.Where(d => d.UtilisateurId == utilisateurId.Value);
+
+                if (!string.IsNullOrEmpty(statut) && Enum.TryParse<StatutDemande>(statut, out var statutEnum))
+                    query = query.Where(d => d.Statut == statutEnum);
+
+                var demandes = await query.ToListAsync();
+
+                var totalDemandes = demandes.Count;
+                var totalSpent = demandes.Sum(d => d.Paiement?.MontantTotal ?? 0);
+                var totalUsers = demandes.Select(d => d.UtilisateurId).Distinct().Count();
+                var averagePerDemande = totalDemandes > 0 ? totalSpent / totalDemandes : 0;
+
+                var demandesParStatut = demandes
+                    .GroupBy(d => d.Statut)
+                    .ToDictionary(g => g.Key.ToString(), g => g.Count());
+
+                var topUsers = demandes
+                    .GroupBy(d => d.UtilisateurId)
+                    .Select(g => new
+                    {
+                        Id = g.Key,
+                        Nom = g.First().Utilisateur.Nom,
+                        Prenom = g.First().Utilisateur.Prenom,
+                        Email = g.First().Utilisateur.Email,
+                        TotalDemandes = g.Count(),
+                        TotalSpent = g.Sum(d => d.Paiement?.MontantTotal ?? 0)
+                    })
+                    .OrderByDescending(x => x.TotalSpent)
+                    .Take(10)
+                    .ToList();
+
+                var topCategories = demandes
+                    .GroupBy(d => d.CategorieId)
+                    .Select(g => new
+                    {
+                        Id = g.Key,
+                        Nom = g.First().Categorie.Nom,
+                        TotalDemandes = g.Count(),
+                        TotalSpent = g.Sum(d => d.Paiement?.MontantTotal ?? 0)
+                    })
+                    .OrderByDescending(x => x.TotalSpent)
+                    .Take(10)
+                    .ToList();
+
+                return Ok(new
+                {
+                    TotalDemandes = totalDemandes,
+                    TotalSpent = totalSpent,
+                    TotalUsers = totalUsers,
+                    AveragePerDemande = averagePerDemande,
+                    DemandesParStatut = demandesParStatut,
+                    TopUsers = topUsers,
+                    TopCategories = topCategories
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = $"Erreur serveur: {ex.Message}" });
+            }
+        }
+
+        [HttpGet("users")]
+        public async Task<IActionResult> GetUsers()
+        {
+            try
+            {
+                var users = await _context.Users
+                    .Select(u => new
+                    {
+                        Id = u.Id,
+                        Nom = u.Nom,
+                        Prenom = u.Prenom,
+                        Email = u.Email
+                    })
+                    .OrderBy(u => u.Nom)
+                    .ToListAsync();
+
+                return Ok(users);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = $"Erreur serveur: {ex.Message}" });
+            }
+        }
 
 
 
