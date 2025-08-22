@@ -177,12 +177,13 @@ namespace Prelevements_par_caisse.Controllers
                         {
                             Id = di.Id,
                             Quantite = di.Quantite,
+                            PrixUnitaire = di.PrixUnitaire,
                             ItemId = di.ItemId,
                             Item = new
                             {
                                 Id = di.Item.Id,
                                 Nom = di.Item.Nom,
-                                PrixUnitaire = di.Item.PrixUnitaire
+                              
                             }
                         }).ToList()
                     })
@@ -255,12 +256,13 @@ namespace Prelevements_par_caisse.Controllers
                         {
                             di.Id,
                             di.Quantite,
+                            di.PrixUnitaire,
                             di.ItemId,
                             Item = new
                             {
                                 di.Item.Id,
                                 di.Item.Nom,
-                                di.Item.PrixUnitaire
+                           
                             }
                         }).ToList()
                     })
@@ -348,6 +350,7 @@ namespace Prelevements_par_caisse.Controllers
                     {
                         Demande = demande,
                         ItemId = demandeItemDto.ItemId,
+                         PrixUnitaire = demandeItemDto.PrixUnitaire,
                         Quantite = demandeItemDto.Quantite
                     });
                 }
@@ -544,8 +547,7 @@ namespace Prelevements_par_caisse.Controllers
                 if (string.IsNullOrWhiteSpace(itemDto.Nom))
                     return BadRequest("Le nom de l'item est requis.");
 
-                if (itemDto.PrixUnitaire <= 0)
-                    return BadRequest("Le prix unitaire doit être positif.");
+          
 
                 var category = await _context.Categories.FindAsync(itemDto.CategorieId);
                 if (category == null)
@@ -561,7 +563,7 @@ namespace Prelevements_par_caisse.Controllers
                 var item = new Item
                 {
                     Nom = itemDto.Nom.Trim(),
-                    PrixUnitaire = itemDto.PrixUnitaire,
+               
                     CategorieId = itemDto.CategorieId
                 };
 
@@ -608,8 +610,7 @@ namespace Prelevements_par_caisse.Controllers
                 if (string.IsNullOrWhiteSpace(itemDto.Nom))
                     return BadRequest("Le nom de l'item est requis.");
 
-                if (itemDto.PrixUnitaire <= 0)
-                    return BadRequest("Le prix unitaire doit être positif.");
+                
 
                 var item = await _context.Items.FindAsync(id);
                 if (item == null)
@@ -628,7 +629,7 @@ namespace Prelevements_par_caisse.Controllers
                     return BadRequest("Un autre item avec ce nom existe déjà dans cette catégorie.");
 
                 item.Nom = itemDto.Nom.Trim();
-                item.PrixUnitaire = itemDto.PrixUnitaire;
+               
                 item.CategorieId = itemDto.CategorieId;
 
                 await _context.SaveChangesAsync();

@@ -18,5 +18,13 @@ namespace Prelevements_par_caisse.Models
 
         [Required]
         public int Quantite { get; set; }
+
+
+
+        public decimal? PrixUnitaire { get; set; }
+
+        [MaxLength(500)]
+        public string? Description { get; set; }
+
     }
 }

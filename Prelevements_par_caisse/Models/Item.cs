@@ -12,8 +12,7 @@ namespace Prelevements_par_caisse.Models
         [Required]
         public string Nom { get; set; }
 
-        [Required]
-        public decimal PrixUnitaire { get; set; }
+      
 
         [Required]
         public Guid CategorieId { get; set; }

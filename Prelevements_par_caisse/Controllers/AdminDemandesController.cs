@@ -48,15 +48,18 @@ namespace Prelevements_par_caisse.Controllers
                         items = d.DemandeItems.Select(di => new {
                             id = di.Id,
                             nom = di.Item.Nom,
-                            quantite = di.Quantite
+                            quantite = di.Quantite,
+                            prixUnitaire = di.PrixUnitaire
                         }),
                         demandeItems = d.DemandeItems.Select(di => new {
                             id = di.Id,
                             quantite = di.Quantite,
+                            prixUnitaire = di.PrixUnitaire,
+                            description = di.Description,
                             item = new
                             {
-                                nom = di.Item.Nom,
-                                prixUnitaire = di.Item.PrixUnitaire
+                                id = di.Item.Id,
+                                nom = di.Item.Nom
                             }
                         }),
                         paiement = d.Paiement != null ? new
@@ -107,10 +110,12 @@ namespace Prelevements_par_caisse.Controllers
                         demandeItems = d.DemandeItems.Select(di => new {
                             id = di.Id,
                             quantite = di.Quantite,
+                            prixUnitaire = di.PrixUnitaire,
+                            description = di.Description,
                             item = new
                             {
-                                nom = di.Item.Nom,
-                                prixUnitaire = di.Item.PrixUnitaire
+                                id = di.Item.Id,
+                                nom = di.Item.Nom
                             }
                         }),
                         paiement = d.Paiement != null ? new
@@ -152,13 +157,31 @@ namespace Prelevements_par_caisse.Controllers
                 if (demande == null)
                     return NotFound(new { message = "Demande introuvable" });
 
-                // Changer le statut
+                // Update prices for each demande item
+                if (dto.DemandeItems != null && dto.DemandeItems.Any())
+                {
+                    foreach (var dtoItem in dto.DemandeItems)
+                    {
+                        var demandeItem = demande.DemandeItems.FirstOrDefault(di => di.Id == dtoItem.Id);
+                        if (demandeItem != null && dtoItem.PrixUnitaire.HasValue)
+                        {
+                            demandeItem.PrixUnitaire = dtoItem.PrixUnitaire.Value;
+                        }
+                        if (!string.IsNullOrEmpty(dtoItem.Description))
+                            {
+                                demandeItem.Description = dtoItem.Description;
+                            }
+                    }
+                }
+
+                // Change status
                 demande.Statut = StatutDemande.Validee;
 
-                // Calcul du montant total
-                var montantTotal = demande.DemandeItems.Sum(di => di.Quantite * di.Item.PrixUnitaire);
+                // Calculate total amount using the prices set by admin
+                var montantTotal = demande.DemandeItems.Sum(di =>
+                    di.Quantite * (di.PrixUnitaire ?? 0));
 
-                // Création du paiement
+                // Create payment
                 var paiement = new Paiement
                 {
                     DemandeId = demande.Id,
@@ -170,8 +193,8 @@ namespace Prelevements_par_caisse.Controllers
                 };
 
                 _context.Paiements.Add(paiement);
-
                 await _context.SaveChangesAsync();
+
                 return Ok(new { message = "Demande validée et paiement généré" });
             }
             catch (Exception ex)
@@ -180,7 +203,6 @@ namespace Prelevements_par_caisse.Controllers
             }
         }
 
-        // Updated method to handle status changes
         [HttpPut("update/{id}")]
         public async Task<IActionResult> UpdateDemande(Guid id, [FromBody] PaiementValidationDto dto)
         {
@@ -198,6 +220,20 @@ namespace Prelevements_par_caisse.Controllers
                 if (demande == null)
                     return NotFound(new { message = "Demande introuvable" });
 
+                // Update prices for each demande item if provided
+                if (dto.DemandeItems != null && dto.DemandeItems.Any())
+                {
+                    foreach (var dtoItem in dto.DemandeItems)
+                    {
+                        var demandeItem = demande.DemandeItems.FirstOrDefault(di => di.Id == dtoItem.Id);
+                        if (demandeItem != null && dtoItem.PrixUnitaire.HasValue)
+                        {
+                            demandeItem.PrixUnitaire = dtoItem.PrixUnitaire.Value;
+                        }
+                        demandeItem.Description = dtoItem.Description;
+                    }
+                }
+
                 // Update status if provided
                 if (!string.IsNullOrEmpty(dto.Statut))
                 {
@@ -211,21 +247,21 @@ namespace Prelevements_par_caisse.Controllers
                     }
                 }
 
-                // Calculate total amount
-                var montantTotal = demande.DemandeItems.Sum(di => di.Quantite * di.Item.PrixUnitaire);
+                // Calculate total amount using the current prices
+                var montantTotal = demande.DemandeItems.Sum(di =>
+                    di.Quantite * (di.PrixUnitaire ?? 0));
 
-                // Si le paiement existe déjà → on le met à jour
+                // Update or create payment
                 if (demande.Paiement != null)
                 {
                     demande.Paiement.ComptePaiement = dto.ComptePaiement;
                     demande.Paiement.MontantEnLettres = dto.MontantEnLettres;
-                    demande.Paiement.MontantTotal = montantTotal; // Update total amount
+                    demande.Paiement.MontantTotal = montantTotal;
                     demande.Paiement.DatePaiement = DateTime.Now;
                     demande.Paiement.EffectuePar = dto.EffectuePar;
                 }
                 else
                 {
-                    // Create new payment if doesn't exist
                     var paiement = new Paiement
                     {
                         DemandeId = demande.Id,
@@ -270,7 +306,6 @@ namespace Prelevements_par_caisse.Controllers
             }
         }
 
-        // NEW: Delete demande endpoint
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteDemande(Guid id)
         {
@@ -284,21 +319,17 @@ namespace Prelevements_par_caisse.Controllers
                 if (demande == null)
                     return NotFound(new { message = "Demande introuvable" });
 
-                // Remove related payment if exists
                 if (demande.Paiement != null)
                 {
                     _context.Paiements.Remove(demande.Paiement);
                 }
 
-                // Remove related demande items
                 if (demande.DemandeItems != null && demande.DemandeItems.Any())
                 {
                     _context.DemandeItems.RemoveRange(demande.DemandeItems);
                 }
 
-                // Remove the demande itself
                 _context.Demandes.Remove(demande);
-
                 await _context.SaveChangesAsync();
 
                 return Ok(new { message = "Demande supprimée avec succès" });
@@ -309,7 +340,6 @@ namespace Prelevements_par_caisse.Controllers
             }
         }
 
-        // NEW: Bulk delete endpoint for multiple demandes
         [HttpDelete("bulk")]
         public async Task<IActionResult> DeleteMultipleDemandes([FromBody] List<Guid> demandeIds)
         {
@@ -331,19 +361,16 @@ namespace Prelevements_par_caisse.Controllers
 
                 foreach (var demande in demandes)
                 {
-                    // Remove related payment if exists
                     if (demande.Paiement != null)
                     {
                         _context.Paiements.Remove(demande.Paiement);
                     }
 
-                    // Remove related demande items
                     if (demande.DemandeItems != null && demande.DemandeItems.Any())
                     {
                         _context.DemandeItems.RemoveRange(demande.DemandeItems);
                     }
 
-                    // Remove the demande itself
                     _context.Demandes.Remove(demande);
                     deletedCount++;
                 }
@@ -361,5 +388,228 @@ namespace Prelevements_par_caisse.Controllers
                 return StatusCode(500, new { message = $"Erreur serveur lors de la suppression multiple: {ex.Message}" });
             }
         }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        [HttpGet("analytics")]
+        public async Task<IActionResult> GetAnalytics()
+        {
+            try
+            {
+                var totalDemandes = await _context.Demandes.CountAsync();
+                var totalSpent = await _context.Paiements.SumAsync(p => p.MontantTotal);
+                var totalUsers = await _context.Users.CountAsync();
+
+                var demandesParStatut = await _context.Demandes
+                    .GroupBy(d => d.Statut)
+                    .Select(g => new { Statut = g.Key.ToString(), Count = g.Count() })
+                    .ToDictionaryAsync(x => x.Statut, x => x.Count);
+
+                var topUsers = await _context.Demandes
+                    .Include(d => d.Utilisateur)
+                    .Include(d => d.Paiement)
+                    .GroupBy(d => d.UtilisateurId)
+                    .Select(g => new
+                    {
+                        Id = g.Key,
+                        Nom = g.First().Utilisateur.Nom,
+                        Prenom = g.First().Utilisateur.Prenom,
+                        Email = g.First().Utilisateur.Email,
+                        TotalDemandes = g.Count(),
+                        TotalSpent = g.Sum(d => d.Paiement != null ? d.Paiement.MontantTotal : 0)
+                    })
+                    .OrderByDescending(x => x.TotalSpent)
+                    .Take(10)
+                    .ToListAsync();
+
+                var topCategories = await _context.Demandes
+                    .Include(d => d.Categorie)
+                    .Include(d => d.Paiement)
+                    .GroupBy(d => d.CategorieId)
+                    .Select(g => new
+                    {
+                        Id = g.Key,
+                        Nom = g.First().Categorie.Nom,
+                        TotalDemandes = g.Count(),
+                        TotalSpent = g.Sum(d => d.Paiement != null ? d.Paiement.MontantTotal : 0)
+                    })
+                    .OrderByDescending(x => x.TotalSpent)
+                    .Take(10)
+                    .ToListAsync();
+
+                var recentDemandes = await _context.Demandes
+                    .Include(d => d.Utilisateur)
+                    .Include(d => d.Categorie)
+                    .Include(d => d.Paiement)
+                    .OrderByDescending(d => d.DateDemande)
+                    .Take(10)
+                    .Select(d => new
+                    {
+                        Id = d.Id,
+                        DateDemande = d.DateDemande,
+                        Statut = d.Statut.ToString(),
+                        Utilisateur = new
+                        {
+                            Nom = d.Utilisateur.Nom,
+                            Prenom = d.Utilisateur.Prenom
+                        },
+                        Categorie = new
+                        {
+                            Nom = d.Categorie.Nom
+                        },
+                        MontantTotal = d.Paiement != null ? d.Paiement.MontantTotal : 0
+                    })
+                    .ToListAsync();
+
+                return Ok(new
+                {
+                    TotalDemandes = totalDemandes,
+                    TotalSpent = totalSpent,
+                    TotalUsers = totalUsers,
+                    DemandesParStatut = demandesParStatut,
+                    TopUsers = topUsers,
+                    TopCategories = topCategories,
+                    RecentDemandes = recentDemandes
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = $"Erreur serveur: {ex.Message}" });
+            }
+        }
+
+        [HttpGet("analytics/filtered")]
+        public async Task<IActionResult> GetFilteredAnalytics(
+            [FromQuery] DateTime? dateDebut,
+            [FromQuery] DateTime? dateFin,
+            [FromQuery] Guid? categorieId,
+            [FromQuery] Guid? itemId,
+            [FromQuery] Guid? utilisateurId,
+            [FromQuery] string statut)
+        {
+            try
+            {
+                var query = _context.Demandes
+                    .Include(d => d.Utilisateur)
+                    .Include(d => d.Categorie)
+                    .Include(d => d.DemandeItems)
+                        .ThenInclude(di => di.Item)
+                    .Include(d => d.Paiement)
+                    .AsQueryable();
+
+                if (dateDebut.HasValue)
+                    query = query.Where(d => d.DateDemande >= dateDebut.Value);
+
+                if (dateFin.HasValue)
+                    query = query.Where(d => d.DateDemande <= dateFin.Value.AddDays(1));
+
+                if (categorieId.HasValue)
+                    query = query.Where(d => d.CategorieId == categorieId.Value);
+
+                if (itemId.HasValue)
+                    query = query.Where(d => d.DemandeItems.Any(di => di.ItemId == itemId.Value));
+
+                if (utilisateurId.HasValue)
+                    query = query.Where(d => d.UtilisateurId == utilisateurId.Value);
+
+                if (!string.IsNullOrEmpty(statut) && Enum.TryParse<StatutDemande>(statut, out var statutEnum))
+                    query = query.Where(d => d.Statut == statutEnum);
+
+                var demandes = await query.ToListAsync();
+
+                var totalDemandes = demandes.Count;
+                var totalSpent = demandes.Sum(d => d.Paiement?.MontantTotal ?? 0);
+                var totalUsers = demandes.Select(d => d.UtilisateurId).Distinct().Count();
+                var averagePerDemande = totalDemandes > 0 ? totalSpent / totalDemandes : 0;
+
+                var demandesParStatut = demandes
+                    .GroupBy(d => d.Statut)
+                    .ToDictionary(g => g.Key.ToString(), g => g.Count());
+
+                var topUsers = demandes
+                    .GroupBy(d => d.UtilisateurId)
+                    .Select(g => new
+                    {
+                        Id = g.Key,
+                        Nom = g.First().Utilisateur.Nom,
+                        Prenom = g.First().Utilisateur.Prenom,
+                        Email = g.First().Utilisateur.Email,
+                        TotalDemandes = g.Count(),
+                        TotalSpent = g.Sum(d => d.Paiement?.MontantTotal ?? 0)
+                    })
+                    .OrderByDescending(x => x.TotalSpent)
+                    .Take(10)
+                    .ToList();
+
+                var topCategories = demandes
+                    .GroupBy(d => d.CategorieId)
+                    .Select(g => new
+                    {
+                        Id = g.Key,
+                        Nom = g.First().Categorie.Nom,
+                        TotalDemandes = g.Count(),
+                        TotalSpent = g.Sum(d => d.Paiement?.MontantTotal ?? 0)
+                    })
+                    .OrderByDescending(x => x.TotalSpent)
+                    .Take(10)
+                    .ToList();
+
+                return Ok(new
+                {
+                    TotalDemandes = totalDemandes,
+                    TotalSpent = totalSpent,
+                    TotalUsers = totalUsers,
+                    AveragePerDemande = averagePerDemande,
+                    DemandesParStatut = demandesParStatut,
+                    TopUsers = topUsers,
+                    TopCategories = topCategories
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = $"Erreur serveur: {ex.Message}" });
+            }
+        }
+
+        [HttpGet("users")]
+        public async Task<IActionResult> GetUsers()
+        {
+            try
+            {
+                var users = await _context.Users
+                    .Select(u => new
+                    {
+                        Id = u.Id,
+                        Nom = u.Nom,
+                        Prenom = u.Prenom,
+                        Email = u.Email
+                    })
+                    .OrderBy(u => u.Nom)
+                    .ToListAsync();
+
+                return Ok(users);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = $"Erreur serveur: {ex.Message}" });
+            }
+        }
+
+
+
+
     }
 }
