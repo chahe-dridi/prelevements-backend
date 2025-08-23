@@ -1257,6 +1257,142 @@ namespace Prelevements_par_caisse.Controllers
 
 
 
+        // Add this method to your AdminDemandesController.cs
+
+        [HttpGet("analytics/financial")]
+        public async Task<IActionResult> GetFinancialAnalytics(
+            [FromQuery] int months = 12,
+            [FromQuery] decimal? minAmount = null,
+            [FromQuery] decimal? maxAmount = null,
+            [FromQuery] Guid? categorieId = null,
+            [FromQuery] bool faveurOnly = false)
+        {
+            try
+            {
+                var startDate = months > 0 ? DateTime.Now.AddMonths(-months) : DateTime.MinValue;
+
+                var baseQuery = _context.Demandes
+                    .Include(d => d.Utilisateur)
+                    .Include(d => d.Categorie)
+                    .Include(d => d.Paiement)
+                    .Include(d => d.DemandeItems)
+                        .ThenInclude(di => di.Item)
+                    .Where(d => d.DateDemande >= startDate && d.Paiement != null);
+
+                // Apply filters
+                if (minAmount.HasValue)
+                    baseQuery = baseQuery.Where(d => d.Paiement.MontantTotal >= minAmount.Value);
+
+                if (maxAmount.HasValue)
+                    baseQuery = baseQuery.Where(d => d.Paiement.MontantTotal <= maxAmount.Value);
+
+                if (categorieId.HasValue && categorieId.Value != Guid.Empty)
+                    baseQuery = baseQuery.Where(d => d.CategorieId == categorieId.Value);
+
+                if (faveurOnly)
+                    baseQuery = baseQuery.Where(d => d.Utilisateur.Is_Faveur);
+
+                var demandes = await baseQuery.ToListAsync();
+
+                // Faveur Users Analysis
+                var faveurAnalytics = demandes
+                    .Where(d => d.Utilisateur.Is_Faveur)
+                    .GroupBy(d => d.UtilisateurId)
+                    .Select(g => new
+                    {
+                        UserId = g.Key,
+                        UserName = $"{g.First().Utilisateur.Nom} {g.First().Utilisateur.Prenom}",
+                        TotalSpent = g.Sum(d => d.Paiement.MontantTotal),
+                        TotalDemandes = g.Count(),
+                        AveragePerRequest = g.Average(d => d.Paiement.MontantTotal),
+                        LastActivity = g.Max(d => d.DateDemande)
+                    })
+                    .OrderByDescending(x => x.TotalSpent)
+                    .ToList();
+
+                // User Spending Analysis
+                var userSpendingAnalytics = demandes
+                    .GroupBy(d => d.UtilisateurId)
+                    .Select(g => new
+                    {
+                        UserId = g.Key,
+                        UserName = $"{g.First().Utilisateur.Nom} {g.First().Utilisateur.Prenom}",
+                        UserEmail = g.First().Utilisateur.Email,
+                        IsFaveur = g.First().Utilisateur.Is_Faveur,
+                        TotalSpent = g.Sum(d => d.Paiement.MontantTotal),
+                        TotalDemandes = g.Count(),
+                        AveragePerRequest = g.Average(d => d.Paiement.MontantTotal)
+                    })
+                    .OrderByDescending(x => x.TotalSpent)
+                    .Take(50)
+                    .ToList();
+
+                // Category Analysis
+                var categoryAnalytics = demandes
+                    .GroupBy(d => d.CategorieId)
+                    .Select(g => new
+                    {
+                        CategoryId = g.Key,
+                        CategoryName = g.First().Categorie.Nom,
+                        TotalSpent = g.Sum(d => d.Paiement.MontantTotal),
+                        TotalDemandes = g.Count(),
+                        UniqueItems = g.SelectMany(d => d.DemandeItems).Select(di => di.ItemId).Distinct().Count(),
+                        AveragePerRequest = g.Average(d => d.Paiement.MontantTotal),
+                        ActiveUsers = g.Select(d => d.UtilisateurId).Distinct().Count(),
+                        TopItems = g.SelectMany(d => d.DemandeItems)
+                            .GroupBy(di => di.ItemId)
+                            .Select(itemGroup => new
+                            {
+                                ItemId = itemGroup.Key,
+                                ItemName = itemGroup.First().Item.Nom,
+                                TotalValue = itemGroup.Sum(di => (di.PrixUnitaire ?? 0) * di.Quantite)
+                            })
+                            .OrderByDescending(x => x.TotalValue)
+                            .Take(5)
+                            .ToList()
+                    })
+                    .OrderByDescending(x => x.TotalSpent)
+                    .ToList();
+
+                // Item Analysis
+                var itemAnalytics = demandes
+                    .SelectMany(d => d.DemandeItems)
+                    .GroupBy(di => di.ItemId)
+                    .Select(g => new
+                    {
+                        ItemId = g.Key,
+                        ItemName = g.First().Item.Nom,
+                        CategoryName = g.First().Item.Categorie.Nom,
+                        TotalQuantity = g.Sum(di => di.Quantite),
+                        TotalValue = g.Sum(di => (di.PrixUnitaire ?? 0) * di.Quantite),
+                        AveragePrice = g.Where(di => di.PrixUnitaire.HasValue).Any()
+                            ? g.Where(di => di.PrixUnitaire.HasValue).Average(di => di.PrixUnitaire.Value)
+                            : 0,
+                        OrderFrequency = g.Count()
+                    })
+                    .OrderByDescending(x => x.TotalValue)
+                    .Take(50)
+                    .ToList();
+
+                return Ok(new
+                {
+                    FaveurAnalytics = faveurAnalytics,
+                    UserSpendingAnalytics = userSpendingAnalytics,
+                    CategoryAnalytics = categoryAnalytics,
+                    ItemAnalytics = itemAnalytics
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new
+                {
+                    message = $"Erreur serveur: {ex.Message}",
+                    details = ex.InnerException?.Message
+                });
+            }
+        }
+
+
 
 
 
