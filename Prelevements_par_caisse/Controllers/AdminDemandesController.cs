@@ -1257,7 +1257,7 @@ namespace Prelevements_par_caisse.Controllers
 
 
 
-        // Add this method to your AdminDemandesController.cs
+        // Update the GetFinancialAnalytics method - replace the existing method with this:
 
         [HttpGet("analytics/financial")]
         public async Task<IActionResult> GetFinancialAnalytics(
@@ -1294,23 +1294,25 @@ namespace Prelevements_par_caisse.Controllers
 
                 var demandes = await baseQuery.ToListAsync();
 
-                // Faveur Users Analysis
-                var faveurAnalytics = demandes
-                    .Where(d => d.Utilisateur.Is_Faveur)
-                    .GroupBy(d => d.UtilisateurId)
+                // EffectuePar Analysis (Payment Executors) - This replaces the old faveur analysis
+                var effectueParAnalytics = demandes
+                    .Where(d => !string.IsNullOrEmpty(d.Paiement.EffectuePar))
+                    .GroupBy(d => d.Paiement.EffectuePar)
                     .Select(g => new
                     {
-                        UserId = g.Key,
-                        UserName = $"{g.First().Utilisateur.Nom} {g.First().Utilisateur.Prenom}",
+                        ExecutorName = g.Key,
                         TotalSpent = g.Sum(d => d.Paiement.MontantTotal),
-                        TotalDemandes = g.Count(),
-                        AveragePerRequest = g.Average(d => d.Paiement.MontantTotal),
-                        LastActivity = g.Max(d => d.DateDemande)
+                        TotalPayments = g.Count(),
+                        AveragePerPayment = g.Average(d => d.Paiement.MontantTotal),
+                        LastPaymentDate = g.Max(d => d.Paiement.DatePaiement),
+                        UniqueUsers = g.Select(d => d.UtilisateurId).Distinct().Count(),
+                        FaveurPayments = g.Count(d => d.Utilisateur.Is_Faveur),
+                        RegularPayments = g.Count(d => !d.Utilisateur.Is_Faveur)
                     })
                     .OrderByDescending(x => x.TotalSpent)
                     .ToList();
 
-                // User Spending Analysis
+                // User Spending Analysis (Regular Users)
                 var userSpendingAnalytics = demandes
                     .GroupBy(d => d.UtilisateurId)
                     .Select(g => new
@@ -1321,7 +1323,11 @@ namespace Prelevements_par_caisse.Controllers
                         IsFaveur = g.First().Utilisateur.Is_Faveur,
                         TotalSpent = g.Sum(d => d.Paiement.MontantTotal),
                         TotalDemandes = g.Count(),
-                        AveragePerRequest = g.Average(d => d.Paiement.MontantTotal)
+                        AveragePerRequest = g.Average(d => d.Paiement.MontantTotal),
+                        LastRequestDate = g.Max(d => d.DateDemande),
+                        ProcessedBy = g.GroupBy(d => d.Paiement.EffectuePar)
+                            .OrderByDescending(pg => pg.Count())
+                            .First().Key // Most frequent executor for this user
                     })
                     .OrderByDescending(x => x.TotalSpent)
                     .Take(50)
@@ -1339,6 +1345,17 @@ namespace Prelevements_par_caisse.Controllers
                         UniqueItems = g.SelectMany(d => d.DemandeItems).Select(di => di.ItemId).Distinct().Count(),
                         AveragePerRequest = g.Average(d => d.Paiement.MontantTotal),
                         ActiveUsers = g.Select(d => d.UtilisateurId).Distinct().Count(),
+                        TopExecutors = g.GroupBy(d => d.Paiement.EffectuePar)
+                            .Where(eg => !string.IsNullOrEmpty(eg.Key))
+                            .Select(eg => new
+                            {
+                                ExecutorName = eg.Key,
+                                PaymentCount = eg.Count(),
+                                TotalAmount = eg.Sum(d => d.Paiement.MontantTotal)
+                            })
+                            .OrderByDescending(x => x.TotalAmount)
+                            .Take(3)
+                            .ToList(),
                         TopItems = g.SelectMany(d => d.DemandeItems)
                             .GroupBy(di => di.ItemId)
                             .Select(itemGroup => new
@@ -1368,7 +1385,11 @@ namespace Prelevements_par_caisse.Controllers
                         AveragePrice = g.Where(di => di.PrixUnitaire.HasValue).Any()
                             ? g.Where(di => di.PrixUnitaire.HasValue).Average(di => di.PrixUnitaire.Value)
                             : 0,
-                        OrderFrequency = g.Count()
+                        OrderFrequency = g.Count(),
+                        TopExecutor = g.GroupBy(di => di.Demande.Paiement.EffectuePar)
+                            .Where(eg => !string.IsNullOrEmpty(eg.Key))
+                            .OrderByDescending(eg => eg.Sum(di => (di.PrixUnitaire ?? 0) * di.Quantite))
+                            .FirstOrDefault()?.Key ?? "N/A"
                     })
                     .OrderByDescending(x => x.TotalValue)
                     .Take(50)
@@ -1376,7 +1397,7 @@ namespace Prelevements_par_caisse.Controllers
 
                 return Ok(new
                 {
-                    FaveurAnalytics = faveurAnalytics,
+                    EffectueParAnalytics = effectueParAnalytics, // Changed from FaveurAnalytics
                     UserSpendingAnalytics = userSpendingAnalytics,
                     CategoryAnalytics = categoryAnalytics,
                     ItemAnalytics = itemAnalytics
@@ -1391,9 +1412,6 @@ namespace Prelevements_par_caisse.Controllers
                 });
             }
         }
-
-
-
 
 
 
